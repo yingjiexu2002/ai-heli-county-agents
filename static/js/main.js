@@ -63,12 +63,25 @@ function checkAuthStatus() {
 // 初始化地图
 function initMap() {
     // 创建地图实例，设置中国的中心坐标和缩放级别
-    map = L.map('map').setView([35.86166, 104.195397], 4);
+    map = L.map('map', {
+        zoomControl: false,  // 禁用默认的缩放控件
+        attributionControl: false  // 禁用默认的归属控件
+    }).setView([35.86166, 104.195397], 4);
     
     // 添加底图图层（使用高德地图）
     L.tileLayer('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
-        attribution: '© 高德地图',
         maxZoom: 18
+    }).addTo(map);
+    
+    // 添加自定义位置的归属控件（右下角但位置较高，避免被页脚遮挡）
+    L.control.attribution({
+        position: 'bottomright',
+        prefix: false
+    }).addAttribution('© 高德地图').addTo(map);
+    
+    // 添加自定义位置的缩放控件（左下角）
+    L.control.zoom({
+        position: 'bottomleft'
     }).addTo(map);
 }
 
