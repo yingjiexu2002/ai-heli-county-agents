@@ -129,7 +129,7 @@ function updateGeoJSONWithAgents() {
 // 县区域样式函数
 function styleCounty(feature) {
     // 获取县名
-    const countyName = feature.properties.NAME;
+    const countyName = feature.properties.name;
     
     // 检查是否有县总代
     const hasAgent = checkCountyHasAgent(countyName);
@@ -151,8 +151,12 @@ function checkCountyHasAgent(countyName) {
     // 遍历所有省市县数据查找匹配
     for (const province in window.agentsData) {
         for (const city in window.agentsData[province]) {
-            if (window.agentsData[province][city][countyName]) {
-                return window.agentsData[province][city][countyName].has_agent;
+            // 遍历该市下的所有县
+            for (const county in window.agentsData[province][city]) {
+                // 检查县名是否匹配
+                if (county === countyName) {
+                    return window.agentsData[province][city][county].has_agent;
+                }
             }
         }
     }
@@ -167,8 +171,12 @@ function getCountyAgentInfo(countyName) {
     // 遍历所有省市县数据查找匹配
     for (const province in window.agentsData) {
         for (const city in window.agentsData[province]) {
-            if (window.agentsData[province][city][countyName]) {
-                return window.agentsData[province][city][countyName];
+            // 遍历该市下的所有县
+            for (const county in window.agentsData[province][city]) {
+                // 检查县名是否匹配
+                if (county === countyName) {
+                    return window.agentsData[province][city][county];
+                }
             }
         }
     }
@@ -178,7 +186,7 @@ function getCountyAgentInfo(countyName) {
 
 // 为每个县添加交互
 function onEachCounty(feature, layer) {
-    const countyName = feature.properties.NAME;
+    const countyName = feature.properties.name;
     const agentInfo = getCountyAgentInfo(countyName);
     
     // 添加弹出框
@@ -238,10 +246,12 @@ function showCountyDetails(countyName) {
     infoPanel.classList.remove('hidden');
     
     // 设置县名
-    document.getElementById('county-name').textContent = countyName;
+    document.getElementById('county-name').textContent = countyName || '未知';
+    console.log('显示县详情:', countyName);
     
     // 获取县总代信息
     const agentInfo = getCountyAgentInfo(countyName);
+    console.log('获取到的代理信息:', agentInfo);
     
     if (agentInfo && agentInfo.has_agent) {
         document.getElementById('agent-name').textContent = agentInfo.name || '暂无';
