@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>爱河里县总代地图</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>爱河里县总代分布图</h1>
+            <div class="auth-container">
+                <div id="login-section" class="auth-section">
+                    <input type="text" id="username" placeholder="用户名">
+                    <input type="password" id="password" placeholder="密码">
+                    <button id="login-btn">登录</button>
+                </div>
+                <div id="user-section" class="auth-section hidden">
+                    <span id="user-info"></span>
+                    <button id="logout-btn">退出</button>
+                </div>
+            </div>
+        </header>
+        
+        <main>
+            <div id="map-container">
+                <div id="map"></div>
+            </div>
+            
+            <div id="info-panel" class="hidden">
+                <h2>县级信息</h2>
+                <div id="county-info">
+                    <p><strong>县名：</strong><span id="county-name"></span></p>
+                    <p><strong>县总代：</strong><span id="agent-name"></span></p>
+                    <p><strong>联系电话：</strong><span id="agent-phone"></span></p>
+                </div>
+                <div id="admin-panel" class="hidden">
+                    <h3>管理员操作</h3>
+                    <div class="form-group">
+                        <label for="edit-agent-name">县总代姓名：</label>
+                        <input type="text" id="edit-agent-name">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-agent-phone">联系电话：</label>
+                        <input type="text" id="edit-agent-phone">
+                    </div>
+                    <button id="update-btn">更新信息</button>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>© 2023 爱河里 - 县总代管理系统</p>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

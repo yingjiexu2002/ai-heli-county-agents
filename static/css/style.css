@@ -1,0 +1,217 @@
+/* 全局样式 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* 头部样式 */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 0;
+    border-bottom: 1px solid #eaeaea;
+}
+
+header h1 {
+    color: #2c3e50;
+    font-size: 24px;
+}
+
+.auth-container {
+    display: flex;
+}
+
+.auth-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+input[type="text"],
+input[type="password"] {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+button {
+    padding: 8px 16px;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+#logout-btn {
+    background-color: #e74c3c;
+}
+
+#logout-btn:hover {
+    background-color: #c0392b;
+}
+
+/* 主要内容区域 */
+main {
+    display: flex;
+    flex: 1;
+    gap: 20px;
+    padding: 20px 0;
+}
+
+#map-container {
+    flex: 3;
+    height: 70vh;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+#map {
+    height: 100%;
+    width: 100%;
+}
+
+#info-panel {
+    flex: 1;
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    max-width: 300px;
+}
+
+#info-panel h2 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+    font-size: 18px;
+    border-bottom: 1px solid #eaeaea;
+    padding-bottom: 10px;
+}
+
+#county-info p {
+    margin-bottom: 10px;
+}
+
+#admin-panel {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px dashed #eaeaea;
+}
+
+#admin-panel h3 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+    color: #555;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#update-btn {
+    width: 100%;
+    background-color: #27ae60;
+}
+
+#update-btn:hover {
+    background-color: #219653;
+}
+
+/* 页脚样式 */
+footer {
+    text-align: center;
+    padding: 20px 0;
+    color: #7f8c8d;
+    font-size: 14px;
+    border-top: 1px solid #eaeaea;
+}
+
+/* 工具类 */
+.hidden {
+    display: none !important;
+}
+
+/* 地图样式覆盖 */
+.leaflet-popup-content-wrapper {
+    border-radius: 4px;
+}
+
+.leaflet-popup-content {
+    margin: 12px 16px;
+    line-height: 1.5;
+}
+
+.county-popup {
+    font-size: 14px;
+}
+
+.county-popup h3 {
+    margin-bottom: 8px;
+    color: #2c3e50;
+}
+
+.county-popup p {
+    margin-bottom: 5px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    main {
+        flex-direction: column;
+    }
+    
+    #map-container {
+        height: 50vh;
+    }
+    
+    #info-panel {
+        max-width: 100%;
+    }
+}
