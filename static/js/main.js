@@ -206,15 +206,7 @@ function onEachCounty(feature, layer) {
         }
         popupContent.appendChild(status);
         
-        const viewBtn = document.createElement('button');
-        viewBtn.textContent = '查看详情';
-        viewBtn.style.marginTop = '10px';
-        viewBtn.onclick = (e) => {
-            e.stopPropagation();
-            showCountyDetails(countyName);
-            layer.closePopup();
-        };
-        popupContent.appendChild(viewBtn);
+        // 移除查看详情按钮，因为点击县区域时已经直接显示详情
         
         return popupContent;
     });
@@ -236,6 +228,9 @@ function onEachCounty(feature, layer) {
             });
             
             selectedCounty = layer;
+            
+            // 直接显示县详情，省略点击查看详情按钮的步骤
+            showCountyDetails(countyName);
         }
     });
 }
