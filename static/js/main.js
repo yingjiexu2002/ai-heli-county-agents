@@ -65,7 +65,12 @@ function initMap() {
     // 创建地图实例，设置中国的中心坐标和缩放级别
     map = L.map('map', {
         zoomControl: false,  // 禁用默认的缩放控件
-        attributionControl: false  // 禁用默认的归属控件
+        attributionControl: false,  // 禁用默认的归属控件
+        maxBounds: [
+            [3.86, 73.55],  // 西南角坐标（中国区域扩展一些）
+            [53.55, 135.09]  // 东北角坐标（中国区域扩展一些）
+        ],
+        maxBoundsViscosity: 1.0  // 设置为1.0表示完全限制在边界内
     }).setView([35.86166, 104.195397], 4);
     
     // 添加底图图层（使用高德地图）
