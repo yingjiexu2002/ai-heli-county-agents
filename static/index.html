@@ -20,6 +20,7 @@
                 <div id="user-section" class="auth-section hidden">
                     <span id="user-info"></span>
                     <button id="logout-btn">退出</button>
+                    <button id="drawer-toggle-btn" class="hidden">管理数据</button>
                 </div>
             </div>
         </header>
@@ -47,6 +48,61 @@
                         <input type="text" id="edit-agent-phone">
                     </div>
                     <button id="update-btn">更新信息</button>
+                </div>
+            </div>
+            
+            <!-- 管理员数据抽屉 -->
+            <div id="admin-drawer" class="drawer">
+                <div class="drawer-header">
+                    <h2>县总代数据管理</h2>
+                    <button id="drawer-close-btn">&times;</button>
+                </div>
+                <div class="drawer-content">
+                    <div class="drawer-section" id="mapped-data-section">
+                        <h3>已映射数据</h3>
+                        <div class="table-container">
+                            <table id="mapped-data-table">
+                                <thead>
+                                    <tr>
+                                        <th>省份</th>
+                                        <th>城市</th>
+                                        <th>县名</th>
+                                        <th>县总代</th>
+                                        <th>联系电话</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- 数据将通过JavaScript动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="resizer-container">
+                        <div id="drawer-resizer"></div>
+                    </div>
+                    
+                    <div class="drawer-section" id="unmapped-data-section">
+                        <h3>未映射数据</h3>
+                        <div class="table-container">
+                            <table id="unmapped-data-table">
+                                <thead>
+                                    <tr>
+                                        <th>省份</th>
+                                        <th>城市</th>
+                                        <th>县名</th>
+                                        <th>县总代</th>
+                                        <th>联系电话</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- 数据将通过JavaScript动态填充 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>

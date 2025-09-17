@@ -4,6 +4,8 @@ let geojsonLayer;
 let selectedCounty = null;
 let isAdmin = false;
 let token = localStorage.getItem('token');
+let mappedCounties = []; // 已在地图上正确映射的县
+let unmappedCounties = []; // 未在地图上正确映射的县
 
 // DOM元素
 const loginSection = document.getElementById('login-section');
@@ -19,6 +21,16 @@ const adminPanel = document.getElementById('admin-panel');
 const editAgentName = document.getElementById('edit-agent-name');
 const editAgentPhone = document.getElementById('edit-agent-phone');
 const updateBtn = document.getElementById('update-btn');
+
+// 抽屉控件DOM元素
+const drawerToggleBtn = document.getElementById('drawer-toggle-btn');
+const adminDrawer = document.getElementById('admin-drawer');
+const drawerCloseBtn = document.getElementById('drawer-close-btn');
+const drawerResizer = document.getElementById('drawer-resizer');
+const mappedDataTable = document.getElementById('mapped-data-table');
+const unmappedDataTable = document.getElementById('unmapped-data-table');
+const mappedDataSection = document.getElementById('mapped-data-section');
+const unmappedDataSection = document.getElementById('unmapped-data-section');
 
 // 初始化函数
 async function init() {
@@ -36,6 +48,16 @@ async function init() {
     
     // 绑定事件
     bindEvents();
+    
+    // 初始化抽屉状态
+    adminDrawer.classList.remove('active');
+    
+    // 设置抽屉部分的初始高度
+    const drawerHeight = adminDrawer.offsetHeight;
+    mappedDataSection.style.height = `${drawerHeight / 2}px`;
+    unmappedDataSection.style.height = `${drawerHeight / 2}px`;
+    mappedDataSection.style.flex = 'none';
+    unmappedDataSection.style.flex = 'none';
 }
 
 // 检查认证状态
@@ -52,11 +74,15 @@ function checkAuthStatus() {
         if (isAdmin) {
             userInfo.textContent = '管理员已登录';
             adminPanel.classList.remove('hidden');
+            drawerToggleBtn.classList.remove('hidden'); // 显示管理数据按钮
+        } else {
+            drawerToggleBtn.classList.add('hidden'); // 隐藏管理数据按钮
         }
     } else {
         loginSection.classList.remove('hidden');
         userSection.classList.add('hidden');
         adminPanel.classList.add('hidden');
+        drawerToggleBtn.classList.add('hidden'); // 隐藏管理数据按钮
     }
 }
 
@@ -126,12 +152,56 @@ async function loadAgentsData() {
             
             // 更新GeoJSON图层，应用县总代数据
             updateGeoJSONWithAgents();
+            
+            // 分类县总代数据为已映射和未映射
+            categorizeCountyData();
+            
+            // 如果抽屉是打开的，更新抽屉中的数据表格
+            if (adminDrawer.classList.contains('active')) {
+                updateDrawerTables();
+            }
         } else {
             console.error('加载县总代数据失败:', result.message);
         }
     } catch (error) {
         console.error('加载县总代数据失败:', error);
     }
+}
+
+// 分类县总代数据为已映射和未映射
+function categorizeCountyData() {
+    if (!window.agentsData || !window.geojsonData) return;
+    
+    // 重置数组
+    mappedCounties = [];
+    unmappedCounties = [];
+    
+    // 获取GeoJSON中的所有县名
+    const geojsonCountyNames = window.geojsonData.features.map(feature => feature.properties.name);
+    
+    // 遍历所有县总代数据
+    for (const province in window.agentsData) {
+        for (const city in window.agentsData[province]) {
+            for (const county in window.agentsData[province][city]) {
+                const countyData = {
+                    province: province,
+                    city: city,
+                    county: county,
+                    ...window.agentsData[province][city][county]
+                };
+                
+                // 检查县名是否在GeoJSON中存在
+                if (geojsonCountyNames.includes(county)) {
+                    mappedCounties.push(countyData);
+                } else {
+                    unmappedCounties.push(countyData);
+                }
+            }
+        }
+    }
+    
+    console.log(`已映射县总代数据: ${mappedCounties.length}个`);
+    console.log(`未映射县总代数据: ${unmappedCounties.length}个`);
 }
 
 // 更新GeoJSON图层，应用县总代数据
@@ -291,6 +361,224 @@ function showCountyDetails(countyName) {
     }
 }
 
+// 更新抽屉中的数据表格
+function updateDrawerTables() {
+    // 更新已映射数据表格
+    updateTable(mappedDataTable, mappedCounties);
+    
+    // 更新未映射数据表格
+    updateTable(unmappedDataTable, unmappedCounties);
+}
+
+// 更新表格数据
+function updateTable(tableElement, dataArray) {
+    const tbody = tableElement.querySelector('tbody');
+    tbody.innerHTML = '';
+    
+    dataArray.forEach(data => {
+        const tr = document.createElement('tr');
+        tr.dataset.county = data.county;
+        
+        // 添加省份单元格
+        const provinceTd = document.createElement('td');
+        provinceTd.textContent = data.province;
+        tr.appendChild(provinceTd);
+        
+        // 添加城市单元格
+        const cityTd = document.createElement('td');
+        cityTd.textContent = data.city;
+        tr.appendChild(cityTd);
+        
+        // 添加县名单元格
+        const countyTd = document.createElement('td');
+        countyTd.textContent = data.county;
+        tr.appendChild(countyTd);
+        
+        // 添加县总代单元格
+        const agentNameTd = document.createElement('td');
+        agentNameTd.textContent = data.name || '暂无';
+        tr.appendChild(agentNameTd);
+        
+        // 添加联系电话单元格
+        const phoneTd = document.createElement('td');
+        phoneTd.textContent = data.phone || '暂无';
+        tr.appendChild(phoneTd);
+        
+        // 添加操作单元格
+        const actionTd = document.createElement('td');
+        actionTd.className = 'action-cell';
+        
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-btn';
+        editBtn.textContent = '编辑';
+        editBtn.addEventListener('click', () => {
+            // 将行切换为编辑模式
+            toggleRowEditMode(tr, data);
+        });
+        
+        actionTd.appendChild(editBtn);
+        tr.appendChild(actionTd);
+        
+        tbody.appendChild(tr);
+    });
+}
+
+// 切换行的编辑模式
+function toggleRowEditMode(tr, data) {
+    const cells = tr.querySelectorAll('td');
+    const isEditing = tr.classList.contains('editing');
+    
+    if (isEditing) {
+        // 已经是编辑模式，切换回显示模式
+        tr.classList.remove('editing');
+        
+        // 恢复单元格内容
+        cells[3].textContent = data.name || '暂无'; // 县总代
+        cells[4].textContent = data.phone || '暂无'; // 联系电话
+        
+        // 恢复操作按钮
+        cells[5].innerHTML = '';
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-btn';
+        editBtn.textContent = '编辑';
+        editBtn.addEventListener('click', () => {
+            toggleRowEditMode(tr, data);
+        });
+        cells[5].appendChild(editBtn);
+    } else {
+        // 切换到编辑模式
+        tr.classList.add('editing');
+        
+        // 县总代单元格改为输入框
+        const agentNameCell = cells[3];
+        agentNameCell.innerHTML = '';
+        agentNameCell.className = 'edit-cell';
+        const agentNameInput = document.createElement('input');
+        agentNameInput.type = 'text';
+        agentNameInput.value = data.name || '';
+        agentNameCell.appendChild(agentNameInput);
+        
+        // 联系电话单元格改为输入框
+        const phoneCell = cells[4];
+        phoneCell.innerHTML = '';
+        phoneCell.className = 'edit-cell';
+        const phoneInput = document.createElement('input');
+        phoneInput.type = 'text';
+        phoneInput.value = data.phone || '';
+        phoneCell.appendChild(phoneInput);
+        
+        // 修改操作按钮
+        const actionCell = cells[5];
+        actionCell.innerHTML = '';
+        
+        // 保存按钮
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'save-btn';
+        saveBtn.textContent = '保存';
+        saveBtn.addEventListener('click', async () => {
+            // 获取输入的值
+            const newAgentName = agentNameInput.value;
+            const newAgentPhone = phoneInput.value;
+            
+            // 调用API更新数据
+            await updateCountyAgent(data.county, newAgentName, newAgentPhone, tr);
+        });
+        actionCell.appendChild(saveBtn);
+        
+        // 取消按钮
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'cancel-btn';
+        cancelBtn.textContent = '取消';
+        cancelBtn.addEventListener('click', () => {
+            toggleRowEditMode(tr, data);
+        });
+        actionCell.appendChild(cancelBtn);
+    }
+}
+
+// 更新县总代信息
+async function updateCountyAgent(countyName, agentName, agentPhone, tr) {
+    if (!agentName || !agentPhone) {
+        alert('请输入县总代姓名和电话');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/county/${countyName}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                agent_name: agentName,
+                agent_phone: agentPhone
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            alert('更新成功');
+            
+            // 重新加载县总代数据
+            await loadAgentsData();
+            
+            // 如果当前选中的县是被更新的县，更新详情面板
+            const currentCountyName = document.getElementById('county-name').textContent;
+            if (currentCountyName === countyName) {
+                showCountyDetails(countyName);
+            }
+        } else {
+            alert(result.message || '更新失败');
+        }
+    } catch (error) {
+        console.error('更新失败:', error);
+        alert('更新失败，请重试');
+    }
+}
+
+// 初始化抽屉分割线拖拽功能
+function initDrawerResizer() {
+    let isDragging = false;
+    let startY = 0;
+    let startHeightTop = 0;
+    let startHeightBottom = 0;
+    
+    drawerResizer.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startY = e.clientY;
+        startHeightTop = mappedDataSection.offsetHeight;
+        startHeightBottom = unmappedDataSection.offsetHeight;
+        
+        document.body.style.cursor = 'row-resize';
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const deltaY = e.clientY - startY;
+        const newHeightTop = startHeightTop + deltaY;
+        const newHeightBottom = startHeightBottom - deltaY;
+        
+        // 确保两个部分都有最小高度
+        if (newHeightTop > 100 && newHeightBottom > 100) {
+            mappedDataSection.style.flex = 'none';
+            unmappedDataSection.style.flex = 'none';
+            mappedDataSection.style.height = `${newHeightTop}px`;
+            unmappedDataSection.style.height = `${newHeightBottom}px`;
+        }
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            document.body.style.cursor = '';
+        }
+    });
+}
+
 // 绑定事件
 function bindEvents() {
     // 登录按钮点击事件
@@ -349,8 +637,9 @@ function bindEvents() {
         // 更新UI
         checkAuthStatus();
         
-        // 隐藏信息面板
+        // 隐藏信息面板和抽屉
         infoPanel.classList.add('hidden');
+        adminDrawer.classList.remove('active');
         
         alert('已退出登录');
     });
@@ -402,6 +691,24 @@ function bindEvents() {
             alert('更新失败，请重试');
         }
     });
+    
+    // 抽屉开关按钮点击事件
+    drawerToggleBtn.addEventListener('click', () => {
+        adminDrawer.classList.toggle('active');
+        
+        // 如果抽屉被打开，加载数据
+        if (adminDrawer.classList.contains('active')) {
+            updateDrawerTables();
+        }
+    });
+    
+    // 抽屉关闭按钮点击事件
+    drawerCloseBtn.addEventListener('click', () => {
+        adminDrawer.classList.remove('active');
+    });
+    
+    // 初始化抽屉分割线拖拽功能
+    initDrawerResizer();
 }
 
 // 页面加载完成后初始化
