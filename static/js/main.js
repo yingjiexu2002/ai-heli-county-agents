@@ -6,6 +6,7 @@ let isAdmin = false;
 let token = localStorage.getItem('token');
 let mappedCounties = []; // 已在地图上正确映射的县
 let unmappedCounties = []; // 未在地图上正确映射的县
+let csrfToken = localStorage.getItem('csrfToken'); // CSRF令牌
 
 // DOM元素
 const loginSection = document.getElementById('login-section');
@@ -34,6 +35,9 @@ const unmappedDataSection = document.getElementById('unmapped-data-section');
 
 // 初始化函数
 async function init() {
+    // 获取CSRF令牌
+    await getCsrfToken();
+    
     // 检查登录状态
     checkAuthStatus();
     
@@ -46,10 +50,57 @@ async function init() {
     // 加载县总代数据
     await loadAgentsData();
     
+    // 初始化抽屉设置
+    initDrawerSettings();
+    
     // 绑定事件
     bindEvents();
-    
-    // 初始化抽屉状态
+}
+
+// 获取CSRF令牌
+async function getCsrfToken() {
+    try {
+        const response = await fetch('/api/csrf-token');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            csrfToken = data.csrf_token;
+            localStorage.setItem('csrfToken', csrfToken);
+        }
+    } catch (error) {
+        console.error('获取CSRF令牌失败:', error);
+    }
+}
+
+// 密码加密函数
+function encryptPassword(password) {
+    try {
+        // 检查CryptoJS是否存在
+        if (typeof CryptoJS === 'undefined') {
+            console.error('CryptoJS is not loaded');
+            throw new Error('CryptoJS库未正确加载');
+        }
+        
+        // 使用CryptoJS进行更安全的加密
+        const salt = "aiheliSalt2023";
+        const saltedPassword = password + salt;
+        
+        // 先进行SHA256哈希
+        const hashedPassword = CryptoJS.SHA256(saltedPassword).toString();
+        
+        // 再进行AES加密，使用固定密钥
+        const secretKey = "aiheli2023SecretKey";
+        const encrypted = CryptoJS.AES.encrypt(hashedPassword, secretKey).toString();
+        
+        return encrypted;
+    } catch (error) {
+        console.error('加密密码时发生错误:', error);
+        throw new Error('密码加密失败: ' + error.message);
+    }
+}
+
+// 初始化抽屉状态和设置函数
+function initDrawerSettings() {
     adminDrawer.classList.remove('active');
     
     // 设置抽屉部分的初始高度
@@ -123,7 +174,22 @@ function initMap() {
 // 加载GeoJSON数据
 async function loadGeoJSON() {
     try {
-        const response = await fetch('/api/geojson');
+        const headers = {};
+        
+        // 如果有CSRF令牌，添加到请求头
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+        
+        const response = await fetch('/api/geojson', { headers });
+        
+        // 检查并更新CSRF令牌（如果在响应头中）
+        const newCsrfToken = response.headers.get('X-CSRF-Token');
+        if (newCsrfToken) {
+            csrfToken = newCsrfToken;
+            localStorage.setItem('csrfToken', csrfToken);
+        }
+        
         const data = await response.json();
         
         // 创建GeoJSON图层但暂不添加数据
@@ -143,7 +209,19 @@ async function loadGeoJSON() {
 // 加载县总代数据
 async function loadAgentsData() {
     try {
-        const response = await fetch('/api/agents');
+        const headers = {};
+        
+        // 如果有token，添加认证头
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        // 如果有CSRF令牌，添加到请求头
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+        
+        const response = await fetch('/api/agents', { headers });
         const result = await response.json();
         
         if (result.status === 'success') {
@@ -159,6 +237,12 @@ async function loadAgentsData() {
             // 如果抽屉是打开的，更新抽屉中的数据表格
             if (adminDrawer.classList.contains('active')) {
                 updateDrawerTables();
+            }
+            
+            // 如果返回了新的CSRF令牌，更新它
+            if (result.csrf_token) {
+                csrfToken = result.csrf_token;
+                localStorage.setItem('csrfToken', csrfToken);
             }
         } else {
             console.error('加载县总代数据失败:', result.message);
@@ -504,19 +588,38 @@ async function updateCountyAgent(countyName, agentName, agentPhone, tr) {
     }
     
     try {
+        // 如果没有CSRF令牌，先获取
+        if (!csrfToken) {
+            await getCsrfToken();
+        }
+        
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        };
+        
+        // 添加CSRF令牌到请求头
+        if (csrfToken) {
+            headers['X-CSRF-Token'] = csrfToken;
+        }
+        
         const response = await fetch(`/api/county/${countyName}`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
+            headers: headers,
             body: JSON.stringify({
                 agent_name: agentName,
-                agent_phone: agentPhone
+                agent_phone: agentPhone,
+                csrf_token: csrfToken // 在请求体中也包含CSRF令牌
             })
         });
         
         const result = await response.json();
+        
+        // 如果返回了新的CSRF令牌，更新它
+        if (result.csrf_token) {
+            csrfToken = result.csrf_token;
+            localStorage.setItem('csrfToken', csrfToken);
+        }
         
         if (result.status === 'success') {
             alert('更新成功');
@@ -591,21 +694,49 @@ function bindEvents() {
             return;
         }
         
+        
         try {
+            // 使用加密函数处理密码
+            let encryptedPassword;
+            try {
+                encryptedPassword = encryptPassword(password);
+            } catch (encryptError) {
+                console.error('密码加密失败:', encryptError);
+                alert(encryptError.message || '密码加密失败，请检查网络连接后重试');
+                return;
+            }
+
+            // 如果没有CSRF令牌，先获取
+            if (!csrfToken) {
+                await getCsrfToken();
+            }
+            
             const response = await fetch('/api/login', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': csrfToken // 添加CSRF令牌到请求头
                 },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify({ 
+                    username, 
+                    password: encryptedPassword, // 发送加密后的密码
+                    csrf_token: csrfToken // 同时在请求体中也包含CSRF令牌
+                })
             });
+
             
             const result = await response.json();
             
             if (result.status === 'success') {
-                // 保存token和管理员状态
+                // 保存token、管理员状态和新的CSRF令牌
                 localStorage.setItem('token', result.token);
                 localStorage.setItem('isAdmin', result.is_admin);
+                
+                // 更新CSRF令牌
+                if (result.csrf_token) {
+                    csrfToken = result.csrf_token;
+                    localStorage.setItem('csrfToken', csrfToken);
+                }
                 
                 // 更新全局变量
                 token = result.token;
@@ -620,28 +751,48 @@ function bindEvents() {
             }
         } catch (error) {
             console.error('登录失败:', error);
-            alert('登录失败，请重试');
+            alert('登录失败，请检查网络连接后重试');
         }
     });
     
     // 退出按钮点击事件
-    logoutBtn.addEventListener('click', () => {
-        // 清除token和管理员状态
-        localStorage.removeItem('token');
-        localStorage.removeItem('isAdmin');
-        
-        // 更新全局变量
-        token = null;
-        isAdmin = false;
-        
-        // 更新UI
-        checkAuthStatus();
-        
-        // 隐藏信息面板和抽屉
-        infoPanel.classList.add('hidden');
-        adminDrawer.classList.remove('active');
-        
-        alert('已退出登录');
+    logoutBtn.addEventListener('click', async () => {
+        try {
+            // 如果有CSRF令牌和token，尝试发送安全退出请求
+            if (csrfToken && token) {
+                await fetch('/api/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({ csrf_token: csrfToken })
+                }).catch(err => console.warn('退出请求发送失败:', err));
+            }
+        } catch (error) {
+            console.warn('安全退出请求失败:', error);
+        } finally {
+            // 无论服务器响应如何，都清除本地存储
+            // 清除token、管理员状态和CSRF令牌
+            localStorage.removeItem('token');
+            localStorage.removeItem('isAdmin');
+            localStorage.removeItem('csrfToken');
+            
+            // 更新全局变量
+            token = null;
+            isAdmin = false;
+            csrfToken = null;
+            
+            // 更新UI
+            checkAuthStatus();
+            
+            // 隐藏信息面板和抽屉
+            infoPanel.classList.add('hidden');
+            adminDrawer.classList.remove('active');
+            
+            alert('已退出登录');
+        }
     });
     
     // 更新按钮点击事件

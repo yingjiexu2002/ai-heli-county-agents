@@ -18,6 +18,17 @@
 - 前端：HTML + CSS + JavaScript
 - 地图：Leaflet.js
 - 数据：GeoJSON + Excel
+- 安全：JWT认证 + CSRF保护 + CryptoJS加密
+
+## 文档
+
+系统相关文档位于 [docs](./docs) 目录：
+
+- [登录安全流程](./docs/login_security.md)
+- [密码安全处理](./docs/password_security.md)
+- [API安全机制](./docs/api_security.md)
+- [数据安全机制](./docs/data_security.md)
+- [部署安全最佳实践](./docs/deployment_security.md)
 
 ## 安装与运行
 
@@ -43,6 +54,17 @@ python app.py
 ```
 
 4. 在浏览器中访问 http://localhost:5000
+
+## 安全特性
+
+本系统实现了多层次的安全保护机制：
+
+- **密码加密**：使用CryptoJS库实现前端密码加密，采用SHA256哈希和AES加密的组合方式
+- **CSRF保护**：所有API请求都需要CSRF令牌验证，防止跨站请求伪造攻击
+- **JWT认证**：使用JWT进行用户身份验证，支持令牌过期和签名验证
+- **请求限制**：实现登录尝试次数限制，防止暴力破解
+- **安全退出**：提供安全的退出机制，清除客户端凭证
+- **数据验证**：对用户输入进行严格验证，防止注入攻击
 
 ## 使用说明
 
