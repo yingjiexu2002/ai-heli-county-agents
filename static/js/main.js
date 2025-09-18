@@ -241,10 +241,9 @@ async function loadAgentsData() {
             // 分类县总代数据为已映射和未映射
             categorizeCountyData();
             
-            // 如果抽屉是打开的，更新抽屉中的数据表格
-            if (adminDrawer.classList.contains('active')) {
-                updateDrawerTables();
-            }
+            // 始终更新抽屉中的数据表格，不管抽屉是否打开
+            // 这样可以确保数据始终是最新的，无论抽屉状态如何
+            updateDrawerTables();
             
             // 如果返回了新的CSRF令牌，更新它
             if (result.csrf_token) {
@@ -512,6 +511,16 @@ function updateTable(tableElement, dataArray) {
         });
         
         actionTd.appendChild(editBtn);
+        
+        // 添加删除按钮
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = '删除';
+        deleteBtn.addEventListener('click', () => {
+            deleteCounty(data.county);
+        });
+        actionTd.appendChild(deleteBtn);
+        
         tr.appendChild(actionTd);
         
         tbody.appendChild(tr);
@@ -540,6 +549,15 @@ function toggleRowEditMode(tr, data) {
             toggleRowEditMode(tr, data);
         });
         cells[5].appendChild(editBtn);
+
+        // 添加删除按钮
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = '删除';
+        deleteBtn.addEventListener('click', () => {
+            deleteCounty(data.county);
+        });
+        cells[5].appendChild(deleteBtn);
     } else {
         // 切换到编辑模式
         tr.classList.add('editing');
@@ -585,8 +603,11 @@ function toggleRowEditMode(tr, data) {
         cancelBtn.className = 'cancel-btn';
         cancelBtn.textContent = '取消';
         cancelBtn.addEventListener('click', () => {
+            // 取消编辑
             toggleRowEditMode(tr, data);
         });
+        
+        actionCell.appendChild(saveBtn);
         actionCell.appendChild(cancelBtn);
     }
 }
@@ -952,4 +973,53 @@ async function handleAddNewAgent() {
 // 处理抽屉拖动
 function handleDrawerResize(e) {
     const drawerRect = adminDrawer.getBoundingClientRect();
+}
+
+// 删除县总代函数
+async function deleteCounty(countyName) {
+    if (!confirm(`确定要删除县总代："${countyName}"吗？此操作不可恢复。`)) {
+        return;
+    }
+
+    try {
+        const headers = {
+            'Authorization': `Bearer ${token}`,
+            'X-CSRF-Token': csrfToken,
+            'Content-Type': 'application/json'
+        };
+
+        const response = await fetch(`/api/county/${countyName}`, {
+            method: 'DELETE',
+            headers: headers,
+            body: JSON.stringify({ csrf_token: csrfToken })
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            showToast('删除成功');
+            console.log('删除成功，开始重新加载数据...');
+            // 重新加载数据以更新地图和表格
+            // loadAgentsData会自动更新抽屉表格，不需要再次调用updateDrawerTables
+            await loadAgentsData();
+            console.log('数据重新加载完成');
+            console.log('已映射县数量:', mappedCounties.length);
+            console.log('未映射县数量:', unmappedCounties.length);
+            
+            // 如果当前有选中的县，且是被删除的县，则关闭信息面板
+            const currentCountyName = document.getElementById('county-name').textContent;
+            if (currentCountyName === countyName) {
+                infoPanel.classList.add('hidden');
+                if (selectedCounty) {
+                    geojsonLayer.resetStyle(selectedCounty);
+                    selectedCounty = null;
+                }
+            }
+        } else {
+            showToast('删除失败: ' + result.message, 'error');
+        }
+    } catch (error) {
+        console.error('删除县总代失败:', error);
+        showToast('删除县总代失败，请稍后重试', 'error');
+    }
 }

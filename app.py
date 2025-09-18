@@ -505,6 +505,76 @@ def get_county(county_name):
             'csrf_token': generate_csrf_token()
         }), 500
 
+# 新增：删除县总代数据（需要管理员权限）
+@app.route('/api/county/<string:county_name>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_county(current_user, is_admin, county_name):
+    data = request.get_json()
+
+    # 验证CSRF令牌
+    if app.config.get('CSRF_ENABLED', True):
+        csrf_token = data.get('csrf_token')
+        if not validate_csrf_token(csrf_token):
+            app.logger.warning(f'删除县总代数据时CSRF验证失败: 用户 {current_user}')
+            return jsonify({
+                'status': 'error',
+                'message': 'CSRF验证失败',
+                'csrf_token': generate_csrf_token()
+            }), 403
+
+    csv_path = 'data/爱河狸数据_地址拆分.csv'
+    temp_csv_path = csv_path + '.tmp'
+    deleted = False
+
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as infile, open(temp_csv_path, 'w', newline='', encoding='utf-8') as outfile:
+            reader = csv.reader(infile)
+            writer = csv.writer(outfile)
+
+            header = next(reader)
+            writer.writerow(header)
+
+            try:
+                county_col = header.index('县名')
+            except ValueError:
+                county_col = 4 # Fallback
+
+            for row in reader:
+                if len(row) > county_col and row[county_col].strip() == county_name:
+                    deleted = True
+                else:
+                    writer.writerow(row)
+
+        if deleted:
+            os.replace(temp_csv_path, csv_path)
+            return jsonify({
+                'status': 'success',
+                'message': f'已成功删除县: {county_name}',
+                'csrf_token': generate_csrf_token()
+            })
+        else:
+            os.remove(temp_csv_path)
+            return jsonify({
+                'status': 'error',
+                'message': f'未找到要删除的县: {county_name}',
+                'csrf_token': generate_csrf_token()
+            }), 404
+
+    except FileNotFoundError:
+        return jsonify({
+            'status': 'error',
+            'message': '代理数据文件不存在',
+            'csrf_token': generate_csrf_token()
+        }), 500
+    except Exception as e:
+        if os.path.exists(temp_csv_path):
+            os.remove(temp_csv_path)
+        return jsonify({
+            'status': 'error',
+            'message': f'删除县信息失败: {str(e)}',
+            'csrf_token': generate_csrf_token()
+        }), 500
 
 # 新增：添加新的县总代数据（需要管理员权限）
 @app.route('/api/county', methods=['POST'])

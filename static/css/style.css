@@ -374,6 +374,14 @@ table tr:hover {
     background-color: #2980b9;
 }
 
+.delete-btn {
+    background-color: #e74c3c;
+}
+
+.delete-btn:hover {
+    background-color: #c0392b;
+}
+
 /* 地图样式覆盖 */
 .leaflet-popup-content-wrapper {
     border-radius: 4px;
