@@ -592,4 +592,6 @@ def get_geojson():
         }), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # 配置SSL上下文以启用HTTPS
+    ssl_context = ('cert.pem', 'key.pem')
+    app.run(debug=True, host='0.0.0.0', port=5000, ssl_context=ssl_context)
