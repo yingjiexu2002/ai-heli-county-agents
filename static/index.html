@@ -55,11 +55,12 @@
             <div id="admin-drawer" class="drawer">
                 <div class="drawer-header">
                     <h2>县总代数据管理</h2>
+                    <button id="add-new-btn">新增</button>
                     <button id="drawer-close-btn">&times;</button>
                 </div>
                 <div class="drawer-content">
                     <div class="drawer-section" id="mapped-data-section">
-                        <h3>已映射数据</h3>
+                        <h3>已映射数据 (<span id="mapped-data-count">0</span>)</h3>
                         <div class="table-container">
                             <table id="mapped-data-table">
                                 <thead>
@@ -84,7 +85,7 @@
                     </div>
                     
                     <div class="drawer-section" id="unmapped-data-section">
-                        <h3>未映射数据</h3>
+                        <h3>未映射数据 (<span id="unmapped-data-count">0</span>)</h3>
                         <div class="table-container">
                             <table id="unmapped-data-table">
                                 <thead>
@@ -106,6 +107,51 @@
                 </div>
             </div>
         </main>
+        
+        <!-- 新增县总代模态框 -->
+        <div id="add-agent-modal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-btn" id="modal-close-btn">&times;</span>
+                <h2>新增县总代</h2>
+                <div class="form-group-grid">
+                    <div class="form-row-2">
+                        <div class="form-group">
+                            <label for="new-agent-name">县总代姓名 (必填)</label>
+                            <input type="text" id="new-agent-name" placeholder="请输入姓名">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-agent-phone">联系电话 (必填)</label>
+                            <input type="text" id="new-agent-phone" placeholder="请输入手机号">
+                        </div>
+                    </div>
+                    <div class="form-row-3">
+                        <div class="form-group">
+                            <label for="new-province">省份 (必填)</label>
+                            <input type="text" id="new-province" placeholder="例如：浙江省">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-city">城市 (必填)</label>
+                            <input type="text" id="new-city" placeholder="例如：杭州市">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-county">县名 (必填)</label>
+                            <input type="text" id="new-county" placeholder="例如：余杭区">
+                        </div>
+                    </div>
+                    <div class="form-row-2">
+                        <div class="form-group">
+                            <label for="new-gdp">GDP (选填)</label>
+                            <input type="text" id="new-gdp" placeholder="例如：1000亿元">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-population">人口 (选填)</label>
+                            <input type="text" id="new-population" placeholder="例如：100万">
+                        </div>
+                    </div>
+                </div>
+                <button id="save-new-agent-btn" class="cta-btn">保存</button>
+            </div>
+        </div>
         
         <!-- 页脚已删除 -->
     </div>

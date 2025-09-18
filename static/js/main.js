@@ -33,6 +33,12 @@ const unmappedDataTable = document.getElementById('unmapped-data-table');
 const mappedDataSection = document.getElementById('mapped-data-section');
 const unmappedDataSection = document.getElementById('unmapped-data-section');
 
+// 新增模态框DOM元素
+const addAgentModal = document.getElementById('add-agent-modal');
+const addNewBtn = document.getElementById('add-new-btn');
+const modalCloseBtn = document.getElementById('modal-close-btn');
+const saveNewAgentBtn = document.getElementById('save-new-agent-btn');
+
 // 初始化函数
 async function init() {
     // 获取CSRF令牌
@@ -452,6 +458,10 @@ function updateDrawerTables() {
     
     // 更新未映射数据表格
     updateTable(unmappedDataTable, unmappedCounties);
+
+    // 更新数据显示条数
+    document.getElementById('mapped-data-count').textContent = mappedCounties.length;
+    document.getElementById('unmapped-data-count').textContent = unmappedCounties.length;
 }
 
 // 更新表格数据
@@ -860,7 +870,75 @@ function bindEvents() {
     
     // 初始化抽屉分割线拖拽功能
     initDrawerResizer();
+
+    // 新增按钮点击事件
+    addNewBtn.addEventListener('click', () => {
+        addAgentModal.classList.remove('hidden');
+    });
+
+    // 模态框关闭按钮点击事件
+    modalCloseBtn.addEventListener('click', () => {
+        addAgentModal.classList.add('hidden');
+    });
+
+    // 保存新县总代按钮点击事件
+    saveNewAgentBtn.addEventListener('click', handleAddNewAgent);
 }
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', init);
+
+// 处理新增县总代
+async function handleAddNewAgent() {
+    const newProvince = document.getElementById('new-province').value.trim();
+    const newCity = document.getElementById('new-city').value.trim();
+    const newCounty = document.getElementById('new-county').value.trim();
+    const newAgentName = document.getElementById('new-agent-name').value.trim();
+    const newAgentPhone = document.getElementById('new-agent-phone').value.trim();
+    const newGdp = document.getElementById('new-gdp').value.trim();
+    const newPopulation = document.getElementById('new-population').value.trim();
+
+    if (!newProvince || !newCity || !newCounty || !newAgentName || !newAgentPhone) {
+        alert('所有字段均为必填项');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/county', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify({
+                province: newProvince,
+                city: newCity,
+                county: newCounty,
+                agent_name: newAgentName,
+                agent_phone: newAgentPhone,
+                gdp: newGdp,
+                population: newPopulation,
+                csrf_token: csrfToken // 在请求体中也包含CSRF令牌
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            alert('新增成功');
+            addAgentModal.classList.add('hidden');
+            loadAgentsData(); // 重新加载数据
+        } else {
+            alert(`新增失败: ${result.message}`);
+        }
+    } catch (error) {
+        console.error('新增县总代失败:', error);
+        alert('新增县总代失败，请稍后重试');
+    }
+}
+
+// 处理抽屉拖动
+function handleDrawerResize(e) {
+    const drawerRect = adminDrawer.getBoundingClientRect();
+}

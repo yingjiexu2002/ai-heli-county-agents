@@ -5,6 +5,7 @@ import uuid
 import time
 import hashlib
 import re
+import csv
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
@@ -75,50 +76,61 @@ def validate_csrf_token(token):
 
 # 加载县总代数据
 def load_agent_data():
+    agents_data = {}
+    csv_path = 'data/爱河里数据_地址拆分.csv'
     try:
-        # 从JSON文件读取县总代数据
-        with open('data/agents_data.json', 'r', encoding='utf-8') as f:
-            raw_agents_data = json.load(f)
-        
-        # 初始化数据结构
-        agents_data = {}
-        
-        # 处理数据
-        for county, info in raw_agents_data.items():
-            province = info.get('province', '')
-            city = info.get('city', '')
-            agent_name = info.get('agent_name', '')
-            phone = info.get('phone', '')
-            
-            # 确保省市县都有值
-            if province and county:
-                # 创建嵌套字典结构
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            try:
+                header = next(reader)  # Skip header
+            except StopIteration:
+                return {} # Empty file
+
+            # Assuming column order: 县总代, 联系电话, 省份, 城市, 县名, ...
+            for row in reader:
+                if not row or len(row) < 5:
+                    continue
+
+                agent_name = row[0].strip()
+                phone = row[1].strip()
+                province = row[2].strip()
+                city = row[3].strip()
+                county = row[4].strip()
+
+                if not province or not county:
+                    continue
+
+                if not city:
+                    city = province
+
                 if province not in agents_data:
                     agents_data[province] = {}
                 
-                if city and city not in agents_data[province]:
+                if city not in agents_data[province]:
                     agents_data[province][city] = {}
                 
-                # 添加县级代理信息
-                if city:
-                    if county not in agents_data[province][city]:
-                        agents_data[province][city][county] = {
-                            'name': agent_name,
-                            'phone': phone,
-                            'has_agent': bool(agent_name)
-                        }
-                else:
-                    if county not in agents_data[province]:
-                        agents_data[province][county] = {
-                            'name': agent_name,
-                            'phone': phone,
-                            'has_agent': bool(agent_name)
-                        }
-        
-        return agents_data
-    except Exception as e:
-        print(f"加载代理数据时出错: {e}")
+                agents_data[province][city][county] = {
+                    'name': agent_name,
+                    'phone': phone,
+                    'has_agent': bool(agent_name)
+                }
+
+    except FileNotFoundError:
+        print(f"警告: 代理数据文件 {csv_path} 未找到。将创建一个空文件。")
+        try:
+            os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['县总代', '联系电话', '省份', '城市', '县名', 'GDP', '人口'])
+        except Exception as e:
+            print(f"创建代理数据文件 {csv_path} 失败: {e}")
         return {}
+    except Exception as e:
+        print(f"从CSV加载代理数据时出错: {e}")
+        return {}
+    
+    return agents_data
+
 
 # 验证Token的装饰器
 def token_required(f):
@@ -445,53 +457,115 @@ def get_agents():
 # 路由：获取单个县信息
 @app.route('/api/county/<county_name>', methods=['GET'])
 def get_county(county_name):
+    csv_path = 'data/爱河里数据_地址拆分.csv'
     try:
-        # 生成新的CSRF令牌
-        new_csrf_token = generate_csrf_token()
-        
-        # 直接从JSON文件读取县总代数据
-        with open('data/agents_data.json', 'r', encoding='utf-8') as f:
-            raw_agents_data = json.load(f)
-        
-        # 检查县名是否存在
-        if county_name in raw_agents_data:
-            county_info = raw_agents_data[county_name]
-            return jsonify({
-                'status': 'success',
-                'data': {
-                    'name': county_name,
-                    'agent_name': county_info.get('agent_name', ''),
-                    'agent_phone': county_info.get('phone', ''),
-                    'has_agent': bool(county_info.get('agent_name', ''))
-                },
-                'csrf_token': new_csrf_token
-            })
-        
-        # 如果在agents_data.json中找不到，尝试使用原来的方法在结构化数据中查找
-        agents_data = load_agent_data()
-        for province, cities in agents_data.items():
-            for city, counties in cities.items():
-                if county_name in counties:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            header = next(reader) # skip header
+            
+            try:
+                name_col = header.index('县总代')
+                phone_col = header.index('联系电话')
+                county_col = header.index('县名')
+            except ValueError:
+                # Fallback to hardcoded indices
+                name_col, phone_col, county_col = 0, 1, 4
+
+            for row in reader:
+                if len(row) > county_col and row[county_col].strip() == county_name:
+                    agent_name = row[name_col].strip()
+                    agent_phone = row[phone_col].strip()
                     return jsonify({
                         'status': 'success',
                         'data': {
                             'name': county_name,
-                            'agent_name': counties[county_name]['name'],
-                            'agent_phone': counties[county_name]['phone'],
-                            'has_agent': counties[county_name]['has_agent']
+                            'agent_name': agent_name,
+                            'agent_phone': agent_phone,
+                            'has_agent': bool(agent_name)
                         },
-                        'csrf_token': new_csrf_token
+                        'csrf_token': generate_csrf_token()
                     })
         
         return jsonify({
             'status': 'error',
             'message': f'未找到县: {county_name}',
-            'csrf_token': new_csrf_token
+            'csrf_token': generate_csrf_token()
         }), 404
+
+    except FileNotFoundError:
+         return jsonify({
+            'status': 'error',
+            'message': f'代理数据文件不存在',
+            'csrf_token': generate_csrf_token()
+        }), 500
     except Exception as e:
         return jsonify({
             'status': 'error',
             'message': f'获取县信息失败: {str(e)}',
+            'csrf_token': generate_csrf_token()
+        }), 500
+
+
+# 新增：添加新的县总代数据（需要管理员权限）
+@app.route('/api/county', methods=['POST'])
+@token_required
+@admin_required
+def add_county(current_user, is_admin):
+    data = request.get_json()
+
+    # 验证CSRF令牌
+    if app.config.get('CSRF_ENABLED', True):
+        csrf_token = data.get('csrf_token')
+        if not validate_csrf_token(csrf_token):
+            app.logger.warning(f'添加县总代数据时CSRF验证失败: 用户 {current_user}')
+            return jsonify({
+                'status': 'error',
+                'message': 'CSRF验证失败',
+                'csrf_token': generate_csrf_token()
+            }), 403
+
+    # 验证输入数据
+    required_fields = ['province', 'city', 'county', 'agent_name', 'agent_phone']
+    if not all(field in data for field in required_fields):
+        return jsonify({
+            'status': 'error',
+            'message': '缺少必要的字段',
+            'csrf_token': generate_csrf_token()
+        }), 400
+
+    province = data['province']
+    city = data['city']
+    county = data['county']
+    agent_name = data['agent_name']
+    agent_phone = data['agent_phone']
+    gdp = data.get('gdp', '')  # 获取GDP，默认为空
+    population = data.get('population', '')  # 获取人口，默认为空
+
+    try:
+        # 记录操作日志
+        app.logger.info(f'用户 {current_user} 正在添加新的县总代数据: {province}-{city}-{county}')
+
+        # 读取现有的CSV文件
+        csv_path = 'data/爱河里数据_地址拆分.csv'
+        new_row = [agent_name, agent_phone, province, city, county, '', ''] # GDP和人口留空
+
+        # 将新数据追加到CSV文件
+        with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(new_row)
+
+        # 返回成功响应
+        return jsonify({
+            'status': 'success',
+            'message': '县总代数据添加成功',
+            'csrf_token': generate_csrf_token()
+        }), 201
+
+    except Exception as e:
+        app.logger.error(f'添加县总代数据时出错: {str(e)}')
+        return jsonify({
+            'status': 'error',
+            'message': f'添加县总代数据失败: {str(e)}',
             'csrf_token': generate_csrf_token()
         }), 500
 
@@ -520,41 +594,42 @@ def update_county(current_user, is_admin, county_name):
             'csrf_token': generate_csrf_token()
         }), 400
     
+    csv_path = 'data/爱河里数据_地址拆分.csv'
     try:
-        # 记录操作日志
         app.logger.info(f'用户 {current_user} 正在更新县 {county_name} 的总代信息')
         
-        # 读取当前JSON文件
-        with open('data/agents_data.json', 'r', encoding='utf-8') as f:
-            agents_data = json.load(f)
+        rows = []
+        county_found = False
         
-        # 检查县名是否存在
-        if county_name in agents_data:
-            # 更新县总代信息
-            agents_data[county_name]['agent_name'] = data.get('agent_name')
-            agents_data[county_name]['phone'] = data.get('agent_phone')
-            agents_data[county_name]['updated_by'] = current_user
-            agents_data[county_name]['updated_at'] = datetime.utcnow().isoformat()
-        else:
-            # 如果县不存在，创建新记录
-            agents_data[county_name] = {
-                'agent_name': data.get('agent_name'),
-                'phone': data.get('agent_phone'),
-                'province': data.get('province', ''),
-                'city': data.get('city', ''),
-                'gdp': '',
-                'population': '',
-                'created_by': current_user,
-                'created_at': datetime.utcnow().isoformat(),
-                'updated_by': current_user,
-                'updated_at': datetime.utcnow().isoformat()
-            }
+        with open(csv_path, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            header = next(reader)
+            rows.append(header)
+            
+            try:
+                name_col = header.index('县总代')
+                phone_col = header.index('联系电话')
+                county_col = header.index('县名')
+            except ValueError:
+                name_col, phone_col, county_col = 0, 1, 4
+
+            for row in reader:
+                if len(row) > county_col and row[county_col].strip() == county_name:
+                    row[name_col] = data['agent_name']
+                    row[phone_col] = data['agent_phone']
+                    county_found = True
+                rows.append(row)
+
+        if not county_found:
+            province = data.get('province', '')
+            city = data.get('city', '')
+            new_row = [data['agent_name'], data['agent_phone'], province, city, county_name, '', '']
+            rows.append(new_row)
+
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerows(rows)
         
-        # 写入更新后的数据
-        with open('data/agents_data.json', 'w', encoding='utf-8') as f:
-            json.dump(agents_data, f, ensure_ascii=False, indent=2)
-        
-        # 生成新的CSRF令牌
         new_csrf_token = generate_csrf_token()
         
         return jsonify({
@@ -562,8 +637,13 @@ def update_county(current_user, is_admin, county_name):
             'message': '更新成功',
             'csrf_token': new_csrf_token
         })
+    except FileNotFoundError:
+        return jsonify({
+            'status': 'error',
+            'message': f'代理数据文件不存在',
+            'csrf_token': generate_csrf_token()
+        }), 500
     except Exception as e:
-        # 记录错误
         app.logger.error(f'更新县总代信息失败: 用户 {current_user}, 县 {county_name}, 错误: {str(e)}')
         
         return jsonify({
@@ -571,6 +651,7 @@ def update_county(current_user, is_admin, county_name):
             'message': f'更新县总代信息失败: {str(e)}',
             'csrf_token': generate_csrf_token()
         }), 500
+
 
 # 路由：提供GeoJSON数据
 @app.route('/api/geojson', methods=['GET'])
