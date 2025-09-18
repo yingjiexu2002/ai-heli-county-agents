@@ -233,13 +233,14 @@ main {
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto; /* 允许垂直滚动 */
+    padding-bottom: 20px; /* 增加底部内边距 */
 }
 
 .drawer-section {
-    flex: 1;
+    flex-shrink: 0; /* 防止section被压缩 */
     padding: 15px 20px;
-    overflow-y: auto;
+    overflow-y: visible; /* 移除内部滚动 */
 }
 
 .drawer-section h3 {
@@ -274,6 +275,7 @@ main {
 .table-container {
     overflow-x: auto;
     margin-bottom: 20px;
+    max-height: calc(50vh - 120px); /* 计算一个大致的最大高度 */
 }
 
 table {
