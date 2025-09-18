@@ -8,6 +8,9 @@ let mappedCounties = []; // 已在地图上正确映射的县
 let unmappedCounties = []; // 未在地图上正确映射的县
 let csrfToken = localStorage.getItem('csrfToken'); // CSRF令牌
 
+// Toast通知元素
+let toastContainer = null;
+
 // DOM元素
 const loginSection = document.getElementById('login-section');
 const userSection = document.getElementById('user-section');
@@ -62,6 +65,47 @@ async function init() {
     
     // 绑定事件
     bindEvents();
+    
+    // 创建Toast容器
+    createToastContainer();
+}
+
+// 创建Toast通知容器
+function createToastContainer() {
+    // 如果已存在容器，则不重复创建
+    if (document.querySelector('.toast-container')) {
+        toastContainer = document.querySelector('.toast-container');
+        return;
+    }
+    
+    // 创建Toast容器
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container';
+    document.body.appendChild(toastContainer);
+}
+
+// 显示Toast通知
+function showToast(message, type = 'success') {
+    // 确保容器存在
+    if (!toastContainer) {
+        createToastContainer();
+    }
+    
+    // 创建Toast元素
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    
+    // 添加到容器
+    toastContainer.appendChild(toast);
+    
+    // 强制重绘以触发动画
+    void toast.offsetWidth;
+    
+    // 设置动画结束后移除
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
 }
 
 // 获取CSRF令牌
@@ -228,7 +272,12 @@ async function loadAgentsData() {
             headers['X-CSRF-Token'] = csrfToken;
         }
         
-        const response = await fetch('/api/agents', { headers });
+        // 添加时间戳参数防止缓存
+        const timestamp = new Date().getTime();
+        const response = await fetch(`/api/agents?_t=${timestamp}`, { 
+            headers,
+            cache: 'no-cache' // 禁用缓存
+        });
         const result = await response.json();
         
         if (result.status === 'success') {
@@ -991,7 +1040,8 @@ async function deleteCounty(countyName) {
         const response = await fetch(`/api/county/${countyName}`, {
             method: 'DELETE',
             headers: headers,
-            body: JSON.stringify({ csrf_token: csrfToken })
+            body: JSON.stringify({ csrf_token: csrfToken }),
+            cache: 'no-cache' // 禁用缓存
         });
 
         const result = await response.json();
@@ -999,9 +1049,18 @@ async function deleteCounty(countyName) {
         if (result.status === 'success') {
             showToast('删除成功');
             console.log('删除成功，开始重新加载数据...');
+            
+            // 清除现有数据缓存
+            window.agentsData = null;
+            mappedCounties = [];
+            unmappedCounties = [];
+            
             // 重新加载数据以更新地图和表格
-            // loadAgentsData会自动更新抽屉表格，不需要再次调用updateDrawerTables
             await loadAgentsData();
+            
+            // 强制更新抽屉表格
+            updateDrawerTables();
+            
             console.log('数据重新加载完成');
             console.log('已映射县数量:', mappedCounties.length);
             console.log('未映射县数量:', unmappedCounties.length);
