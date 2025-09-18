@@ -22,6 +22,7 @@ const adminPanel = document.getElementById('admin-panel');
 const editAgentName = document.getElementById('edit-agent-name');
 const editAgentPhone = document.getElementById('edit-agent-phone');
 const updateBtn = document.getElementById('update-btn');
+const infoPanelCloseBtn = document.getElementById('info-panel-close-btn');
 
 // 抽屉控件DOM元素
 const drawerToggleBtn = document.getElementById('drawer-toggle-btn');
@@ -883,6 +884,16 @@ function bindEvents() {
 
     // 保存新县总代按钮点击事件
     saveNewAgentBtn.addEventListener('click', handleAddNewAgent);
+
+    // 信息面板关闭按钮事件
+    infoPanelCloseBtn.addEventListener('click', () => {
+        infoPanel.classList.add('hidden');
+        // 如果有选中的县，重置其样式
+        if (selectedCounty) {
+            geojsonLayer.resetStyle(selectedCounty);
+            selectedCounty = null;
+        }
+    });
 }
 
 // 页面加载完成后初始化
