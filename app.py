@@ -77,7 +77,7 @@ def validate_csrf_token(token):
 def load_agent_data():
     try:
         # 从JSON文件读取县总代数据
-        with open('agents_data.json', 'r', encoding='utf-8') as f:
+        with open('data/agents_data.json', 'r', encoding='utf-8') as f:
             raw_agents_data = json.load(f)
         
         # 初始化数据结构
@@ -450,7 +450,7 @@ def get_county(county_name):
         new_csrf_token = generate_csrf_token()
         
         # 直接从JSON文件读取县总代数据
-        with open('agents_data.json', 'r', encoding='utf-8') as f:
+        with open('data/agents_data.json', 'r', encoding='utf-8') as f:
             raw_agents_data = json.load(f)
         
         # 检查县名是否存在
@@ -525,7 +525,7 @@ def update_county(current_user, is_admin, county_name):
         app.logger.info(f'用户 {current_user} 正在更新县 {county_name} 的总代信息')
         
         # 读取当前JSON文件
-        with open('agents_data.json', 'r', encoding='utf-8') as f:
+        with open('data/agents_data.json', 'r', encoding='utf-8') as f:
             agents_data = json.load(f)
         
         # 检查县名是否存在
@@ -551,7 +551,7 @@ def update_county(current_user, is_admin, county_name):
             }
         
         # 写入更新后的数据
-        with open('agents_data.json', 'w', encoding='utf-8') as f:
+        with open('data/agents_data.json', 'w', encoding='utf-8') as f:
             json.dump(agents_data, f, ensure_ascii=False, indent=2)
         
         # 生成新的CSRF令牌
@@ -576,7 +576,7 @@ def update_county(current_user, is_admin, county_name):
 @app.route('/api/geojson', methods=['GET'])
 def get_geojson():
     try:
-        with open('中国_县.geojson', 'r', encoding='utf-8') as f:
+        with open('data/中国_县.geojson', 'r', encoding='utf-8') as f:
             geojson_data = json.load(f)
         
         # 为了保持前端兼容性，直接返回GeoJSON数据
