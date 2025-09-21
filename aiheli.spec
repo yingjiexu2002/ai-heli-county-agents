@@ -12,10 +12,17 @@ a = Analysis(
         ('cert.pem', '.'),
         ('key.pem', '.'),
     ],
-    hiddenimports=[],
+    hiddenimports=[
+        # PyCryptodome components used for AES and padding
+        'Crypto', 'Crypto.Cipher', 'Crypto.Cipher.AES', 'Crypto.Util.Padding', 'Crypto.Hash.MD5',
+        # PyJWT algorithm backends
+        'jwt', 'jwt.algorithms',
+        # Flask CORS
+        'flask_cors',
+    ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['rth_startup_log.py'],
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

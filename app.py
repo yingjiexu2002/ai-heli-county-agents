@@ -13,26 +13,79 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import secrets
 
-app = Flask(__name__, static_folder='static')
+# 添加这个函数来获取正确的资源路径（优先外部，其次打包内部，最后项目目录）
+def get_data_path(relative_path):
+    """获取资源文件的路径，优先使用exe所在目录下的外部文件，否则退回到PyInstaller打包内资源，再否则使用项目目录。
+
+    示例：get_data_path('data/中国_县.geojson') 或 get_data_path('cert.pem')
+    """
+    # 首先检查exe所在目录
+    try:
+        base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    except Exception:
+        base_dir = os.path.abspath('.')
+
+    external_path = os.path.join(base_dir, relative_path)
+    if os.path.exists(external_path):
+        # 调试提示：优先使用外部资源
+        try:
+            app.logger.debug(f"使用外部资源路径: {external_path}")
+        except Exception:
+            pass
+        return external_path
+
+    # 如果外部文件不存在，则使用打包内的资源
+    try:
+        base_path = sys._MEIPASS  # PyInstaller临时目录
+        internal_path = os.path.join(base_path, relative_path)
+        if os.path.exists(internal_path):
+            try:
+                app.logger.debug(f"使用打包内资源路径: {internal_path}")
+            except Exception:
+                pass
+            return internal_path
+    except Exception:
+        pass
+
+    # 不是通过PyInstaller运行或内部资源不存在时，使用项目目录
+    fallback = os.path.join(os.path.abspath('.'), relative_path)
+    try:
+        app.logger.debug(f"使用项目目录路径: {fallback}")
+    except Exception:
+        pass
+    return fallback
+
+# 使用兼容打包路径的静态目录
+app = Flask(__name__, static_folder=get_data_path('static'))
 CORS(app, supports_credentials=True)
 
-# 使用更安全的密钥生成方式
+# 使用更安全且健壮的密钥生成方式（处理不可写目录等情况）
 if not os.environ.get('SECRET_KEY'):
-    # 如果环境变量中没有设置密钥，则生成一个随机密钥并保存到.env文件中
-    if os.path.exists('.env') and 'SECRET_KEY' in open('.env').read():
-        # 从.env文件读取密钥
-        with open('.env', 'r') as f:
-            for line in f:
-                if line.startswith('SECRET_KEY='):
-                    os.environ['SECRET_KEY'] = line.strip().split('=', 1)[1].strip('"\'')
-                    break
-    else:
-        # 生成新密钥
-        new_secret_key = secrets.token_hex(32)
-        os.environ['SECRET_KEY'] = new_secret_key
-        # 保存到.env文件
-        with open('.env', 'a+') as f:
-            f.write(f'\nSECRET_KEY="{new_secret_key}"\n')
+    try:
+        # 如果环境变量中没有设置密钥，则尝试从.env文件读取
+        if os.path.exists('.env'):
+            try:
+                with open('.env', 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.startswith('SECRET_KEY='):
+                            os.environ['SECRET_KEY'] = line.strip().split('=', 1)[1].strip('\"\'')
+                            break
+            except Exception:
+                pass
+
+        # 若仍未得到，生成新密钥并尽量写入.env；写入失败时继续使用内存中的密钥
+        if not os.environ.get('SECRET_KEY'):
+            new_secret_key = secrets.token_hex(32)
+            os.environ['SECRET_KEY'] = new_secret_key
+            try:
+                with open('.env', 'a+', encoding='utf-8') as f:
+                    f.write(f'\nSECRET_KEY="{new_secret_key}"\n')
+            except Exception:
+                # 可能是目录不可写，忽略写入错误，继续使用环境变量中的密钥
+                pass
+    except Exception:
+        # 兜底：仍然保证有密钥
+        os.environ['SECRET_KEY'] = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 
 # 配置密钥
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
@@ -64,24 +117,7 @@ users = {
     }
 }
 
-# 添加这个函数来获取正确的资源路径
-def get_data_path(relative_path):
-    """获取数据文件的路径，优先使用外部data文件夹"""
-    # 首先检查exe所在目录下的data文件夹
-    base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-    external_path = os.path.join(base_dir, relative_path)
-    
-    if os.path.exists(external_path):
-        return external_path
-    
-    # 如果外部文件不存在，则使用打包内的资源
-    try:
-        # PyInstaller创建临时文件夹，将路径存储在_MEIPASS中
-        base_path = sys._MEIPASS
-        return os.path.join(base_path, relative_path)
-    except Exception:
-        # 不是通过PyInstaller运行时，使用当前目录
-        return os.path.join(os.path.abspath("."), relative_path)
+# 注意：get_data_path 已上移到文件顶部，避免重复定义
 
 # 生成CSRF令牌
 def generate_csrf_token():
@@ -248,7 +284,8 @@ def limit_login_attempts(f):
 # 路由：首页
 @app.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
+    # 使用 Flask 内置的静态文件发送接口，自动基于 app.static_folder 定位
+    return app.send_static_file('index.html')
 
 # 路由：安全退出
 @app.route('/api/logout', methods=['POST'])
@@ -762,9 +799,21 @@ def get_geojson():
         }), 500
 
 if __name__ == '__main__':
-    # 确保外部数据文件存在
-    from utils.pack_utils import ensure_external_data_exists
-    ensure_external_data_exists()
-    # 配置SSL上下文以启用HTTPS
-    ssl_context = ('cert.pem', 'key.pem')
-    app.run(debug=True, host='0.0.0.0', port=5000, ssl_context=ssl_context)
+    try:
+        # 确保外部数据文件存在
+        from utils.pack_utils import ensure_external_data_exists
+        ensure_external_data_exists()
+        # 配置SSL上下文以启用HTTPS
+        ssl_context = (get_data_path('cert.pem'), get_data_path('key.pem'))
+        app.run(debug=True, host='0.0.0.0', port=5000, ssl_context=ssl_context)
+    except Exception as e:
+        # 在打包环境下，控制台可能被隐藏，写一份启动异常到日志文件
+        try:
+            base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+            log_file = os.path.join(base_dir, 'startup_error.log')
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(f"[{datetime.now().isoformat()}] 启动异常: {repr(e)}\n")
+        except Exception:
+            pass
+        # 仍然抛出以便在控制台可见
+        raise
