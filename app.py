@@ -1,10 +1,10 @@
 import os
+import sys
 import json
 import jwt
 import uuid
 import time
 import hashlib
-import re
 import csv
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session
@@ -64,6 +64,25 @@ users = {
     }
 }
 
+# 添加这个函数来获取正确的资源路径
+def get_data_path(relative_path):
+    """获取数据文件的路径，优先使用外部data文件夹"""
+    # 首先检查exe所在目录下的data文件夹
+    base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    external_path = os.path.join(base_dir, relative_path)
+    
+    if os.path.exists(external_path):
+        return external_path
+    
+    # 如果外部文件不存在，则使用打包内的资源
+    try:
+        # PyInstaller创建临时文件夹，将路径存储在_MEIPASS中
+        base_path = sys._MEIPASS
+        return os.path.join(base_path, relative_path)
+    except Exception:
+        # 不是通过PyInstaller运行时，使用当前目录
+        return os.path.join(os.path.abspath("."), relative_path)
+
 # 生成CSRF令牌
 def generate_csrf_token():
     if 'csrf_token' not in session:
@@ -77,7 +96,7 @@ def validate_csrf_token(token):
 # 加载县总代数据
 def load_agent_data():
     agents_data = {}
-    csv_path = 'data/爱河狸数据_地址拆分.csv'
+    csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
@@ -457,7 +476,7 @@ def get_agents():
 # 路由：获取单个县信息
 @app.route('/api/county/<county_name>', methods=['GET'])
 def get_county(county_name):
-    csv_path = 'data/爱河狸数据_地址拆分.csv'
+    csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
@@ -523,7 +542,7 @@ def delete_county(current_user, is_admin, county_name):
                 'csrf_token': generate_csrf_token()
             }), 403
 
-    csv_path = 'data/爱河狸数据_地址拆分.csv'
+    csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
     temp_csv_path = csv_path + '.tmp'
     deleted = False
 
@@ -616,7 +635,7 @@ def add_county(current_user, is_admin):
         app.logger.info(f'用户 {current_user} 正在添加新的县总代数据: {province}-{city}-{county}')
 
         # 读取现有的CSV文件
-        csv_path = 'data/爱河狸数据_地址拆分.csv'
+        csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
         new_row = [agent_name, agent_phone, province, city, county, '', ''] # GDP和人口留空
 
         # 将新数据追加到CSV文件
@@ -664,7 +683,7 @@ def update_county(current_user, is_admin, county_name):
             'csrf_token': generate_csrf_token()
         }), 400
     
-    csv_path = 'data/爱河狸数据_地址拆分.csv'
+    csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
     try:
         app.logger.info(f'用户 {current_user} 正在更新县 {county_name} 的总代信息')
         
@@ -727,7 +746,7 @@ def update_county(current_user, is_admin, county_name):
 @app.route('/api/geojson', methods=['GET'])
 def get_geojson():
     try:
-        with open('data/中国_县.geojson', 'r', encoding='utf-8') as f:
+        with open(get_data_path('data/中国_县.geojson'), 'r', encoding='utf-8') as f:
             geojson_data = json.load(f)
         
         # 为了保持前端兼容性，直接返回GeoJSON数据
@@ -743,6 +762,9 @@ def get_geojson():
         }), 500
 
 if __name__ == '__main__':
+    # 确保外部数据文件存在
+    from utils.pack_utils import ensure_external_data_exists
+    ensure_external_data_exists()
     # 配置SSL上下文以启用HTTPS
     ssl_context = ('cert.pem', 'key.pem')
     app.run(debug=True, host='0.0.0.0', port=5000, ssl_context=ssl_context)
