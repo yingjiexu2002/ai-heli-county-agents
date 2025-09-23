@@ -178,6 +178,11 @@ def load_agent_data():
                 if city not in agents_data[province]:
                     agents_data[province][city] = {}
                 
+                # 检查是否已存在相同省市县的数据，如果存在则记录日志提示数据覆盖
+                if county in agents_data[province][city]:
+                    existing_agent = agents_data[province][city][county]['name']
+                    app.logger.warning(f'数据覆盖警告: 省份[{province}] 城市[{city}] 县[{county}] 的县总代数据从 [{existing_agent}] 被覆盖为 [{agent_name}]')
+                
                 # 只要有姓名就算有县总代，包括只有姓名没有电话的情况
                 agents_data[province][city][county] = {
                     'name': agent_name,
@@ -699,9 +704,9 @@ def add_county(current_user, is_admin):
             'csrf_token': generate_csrf_token()
         }), 400
 
-    province = data['province']
-    city = data['city']
-    county = data['county']
+    province = data['province'] if data['province'] else '未知省份'
+    city = data['city'] if data['city'] else '未知城市'
+    county = data['county'] if data['county'] else '未知县'
     agent_name = data['agent_name']
     agent_phone = data['agent_phone']
     gdp = data.get('gdp', '')  # 获取GDP，默认为空
@@ -781,16 +786,20 @@ def update_county(current_user, is_admin, county_name):
 
             for row in reader:
                 if len(row) > county_col and row[county_col].strip() == county_name:
+                    old_name = row[name_col]
+                    old_phone = row[phone_col]
                     row[name_col] = data['agent_name']
                     row[phone_col] = data['agent_phone']
                     county_found = True
+                    app.logger.info(f'更新县总代信息: 县[{county_name}] 的县总代从 [{old_name}/{old_phone}] 更新为 [{data["agent_name"]}/{data["agent_phone"]}]')
                 rows.append(row)
 
         if not county_found:
-            province = data.get('province', '')
-            city = data.get('city', '')
+            province = data.get('province', '') if data.get('province', '') else '未知省份'
+            city = data.get('city', '') if data.get('city', '') else '未知城市'
             new_row = [data['agent_name'], data['agent_phone'], province, city, county_name, '', '']
             rows.append(new_row)
+            app.logger.info(f'在更新过程中添加新县总代: 省份[{province}] 城市[{city}] 县[{county_name}] 县总代[{data["agent_name"]}/{data["agent_phone"]}]')
 
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
