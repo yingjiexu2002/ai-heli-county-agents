@@ -7,7 +7,7 @@ import time
 import hashlib
 import csv
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, send_from_directory, session
+from flask import Flask, request, jsonify, send_from_directory, session, Response
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -36,6 +36,7 @@ def get_data_path(relative_path):
 
     # 如果外部文件不存在，则使用打包内的资源
     try:
+        # pylint: disable=protected-access,no-member
         base_path = sys._MEIPASS  # PyInstaller临时目录
         internal_path = os.path.join(base_path, relative_path)
         if os.path.exists(internal_path):
@@ -95,6 +96,9 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 # 配置CSRF保护
 app.config['WTF_CSRF_SECRET_KEY'] = os.environ.get('WTF_CSRF_SECRET_KEY', secrets.token_hex(16))
 
+# 配置JSON编码，确保中文不会被转义为Unicode
+app.config['JSON_AS_ASCII'] = False
+
 # 登录尝试限制
 login_attempts = {}
 MAX_ATTEMPTS = 5
@@ -136,6 +140,7 @@ def load_agent_data():
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
+            # print(f"读取文件 {csv_path}，共 {sum(1 for row in reader)} 行数据")
             try:
                 header = next(reader)  # Skip header
             except StopIteration:
@@ -143,20 +148,29 @@ def load_agent_data():
 
             # Assuming column order: 县总代, 联系电话, 省份, 城市, 县名, ...
             for row in reader:
-                if not row or len(row) < 5:
+                if not row or len(row) < 1:
                     continue
 
-                agent_name = row[0].strip()
-                phone = row[1].strip()
-                province = row[2].strip()
-                city = row[3].strip()
-                county = row[4].strip()
+                agent_name = row[0].strip() if len(row) > 0 and row[0].strip() else ''
+                phone = row[1].strip() if len(row) > 1 and row[1].strip() else ''
+                province = row[2].strip() if len(row) > 2 and row[2].strip() else ''
+                city = row[3].strip() if len(row) > 3 and row[3].strip() else ''
+                county = row[4].strip() if len(row) > 4 and row[4].strip() else ''
 
-                if not province or not county:
+                # 跳过完全没有姓名的数据
+                if not agent_name:
                     continue
 
+                if not county:
+                    county = '未知'
+                
+                # 如果省份为空，使用"未知省份"
+                if not province:
+                    province = '未知'
+                
+                # 如果城市为空
                 if not city:
-                    city = province
+                    city = '未知'
 
                 if province not in agents_data:
                     agents_data[province] = {}
@@ -164,6 +178,7 @@ def load_agent_data():
                 if city not in agents_data[province]:
                     agents_data[province][city] = {}
                 
+                # 只要有姓名就算有县总代，包括只有姓名没有电话的情况
                 agents_data[province][city][county] = {
                     'name': agent_name,
                     'phone': phone,
@@ -504,11 +519,16 @@ def get_agents():
     # 生成新的CSRF令牌
     new_csrf_token = generate_csrf_token()
     
-    return jsonify({
+    # 使用Flask的Response直接返回JSON，确保中文不被转义
+    response_data = {
         'status': 'success',
         'data': agents_data,
         'csrf_token': new_csrf_token
-    })
+    }
+    return Response(
+        json.dumps(response_data, ensure_ascii=False),
+        mimetype='application/json'
+    )
 
 # 路由：获取单个县信息
 @app.route('/api/county/<county_name>', methods=['GET'])
@@ -529,37 +549,57 @@ def get_county(county_name):
 
             for row in reader:
                 if len(row) > county_col and row[county_col].strip() == county_name:
-                    agent_name = row[name_col].strip()
-                    agent_phone = row[phone_col].strip()
-                    return jsonify({
+                    agent_name = row[name_col].strip() if len(row) > name_col and row[name_col].strip() else ''
+                    agent_phone = row[phone_col].strip() if len(row) > phone_col and row[phone_col].strip() else ''
+                    # 使用Flask的Response直接返回JSON，确保中文不被转义
+                    response_data = {
                         'status': 'success',
                         'data': {
                             'name': county_name,
                             'agent_name': agent_name,
                             'agent_phone': agent_phone,
-                            'has_agent': bool(agent_name)
+                            'has_agent': bool(agent_name)  # 只要有姓名就算有县总代
                         },
                         'csrf_token': generate_csrf_token()
-                    })
+                    }
+                    return Response(
+                        json.dumps(response_data, ensure_ascii=False),
+                        mimetype='application/json'
+                    )
         
-        return jsonify({
+        error_data = {
             'status': 'error',
             'message': f'未找到县: {county_name}',
             'csrf_token': generate_csrf_token()
-        }), 404
+        }
+        return Response(
+            json.dumps(error_data, ensure_ascii=False),
+            mimetype='application/json',
+            status=404
+        )
 
     except FileNotFoundError:
-         return jsonify({
+        error_data = {
             'status': 'error',
             'message': f'代理数据文件不存在',
             'csrf_token': generate_csrf_token()
-        }), 500
+        }
+        return Response(
+            json.dumps(error_data, ensure_ascii=False),
+            mimetype='application/json',
+            status=500
+        )
     except Exception as e:
-        return jsonify({
+        error_data = {
             'status': 'error',
             'message': f'获取县信息失败: {str(e)}',
             'csrf_token': generate_csrf_token()
-        }), 500
+        }
+        return Response(
+            json.dumps(error_data, ensure_ascii=False),
+            mimetype='application/json',
+            status=500
+        )
 
 # 新增：删除县总代数据（需要管理员权限）
 @app.route('/api/county/<string:county_name>', methods=['DELETE'])
