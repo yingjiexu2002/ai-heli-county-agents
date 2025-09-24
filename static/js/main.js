@@ -439,7 +439,11 @@ function getCountyAgentInfo(countyName) {
             for (const county in window.agentsData[province][city]) {
                 // 检查县名是否匹配
                 if (county === countyName) {
-                    return window.agentsData[province][city][county];
+                    // 添加省份信息到返回数据中
+                    const countyData = window.agentsData[province][city][county];
+                    countyData.province = province;
+                    countyData.city = city;
+                    return countyData;
                 }
             }
         }
@@ -522,6 +526,14 @@ function showCountyDetails(countyName) {
             permissionNote.textContent = '(管理员可查看完整数据)';
             permissionNote.classList.remove('hidden');
         }
+    }
+    
+    // 设置省份信息
+    const provinceName = document.getElementById('province-name');
+    if (agentInfo && agentInfo.province) {
+        provinceName.textContent = agentInfo.province || '暂无';
+    } else {
+        provinceName.textContent = '暂无';
     }
     
     if (agentInfo && agentInfo.has_agent) {
