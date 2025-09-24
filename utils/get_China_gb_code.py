@@ -76,7 +76,10 @@ def get_administrative_divisions_nested():
             # === 修改核心：创建嵌套字典 ===
             # setdefault(key, {}) 会获取key对应的字典，如果不存在，则创建一个空字典并返回
             # 这样可以优雅地实现三级嵌套赋值
-            result_json.setdefault(province_name, {}).setdefault(city_name, {})[name] = code
+            # === 修改核心：在赋值时为code加上"156"前缀 ===
+            # 使用 f-string 格式化字符串
+            prefixed_code = f"156{code}"
+            result_json.setdefault(province_name, {}).setdefault(city_name, {})[name] = prefixed_code
             
     print("数据解析完成！")
     return result_json
