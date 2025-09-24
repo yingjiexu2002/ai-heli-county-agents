@@ -11,16 +11,19 @@
     <div class="container">
         <header>
             <h1>爱河狸县总代分布图</h1>
-            <div class="auth-container">
-                <div id="login-section" class="auth-section">
-                    <input type="text" id="username" placeholder="用户名">
-                    <input type="password" id="password" placeholder="密码">
-                    <button id="login-btn">登录</button>
-                </div>
-                <div id="user-section" class="auth-section hidden">
-                    <span id="user-info"></span>
-                    <button id="logout-btn">退出</button>
-                    <button id="drawer-toggle-btn" class="hidden">管理数据</button>
+            <div class="header-actions">
+                <button id="search-btn" class="icon-btn search-btn" title="搜索"><i class="search-icon"></i></button>
+                <div class="auth-container">
+                    <div id="login-section" class="auth-section">
+                        <input type="text" id="username" placeholder="用户名">
+                        <input type="password" id="password" placeholder="密码">
+                        <button id="login-btn">登录</button>
+                    </div>
+                    <div id="user-section" class="auth-section hidden">
+                        <span id="user-info"></span>
+                        <button id="logout-btn">退出</button>
+                        <button id="drawer-toggle-btn" class="hidden">管理数据</button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -165,5 +168,30 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="/static/js/crypto-js.min.js"></script>
     <script src="/static/js/main.js"></script>
+    
+    <!-- 搜索浮窗 -->
+    <div id="search-modal" class="modal hidden">
+        <div class="modal-content search-modal-content">
+            <span class="close-btn" id="search-modal-close-btn">&times;</span>
+            <h2>搜索</h2>
+            <div class="search-options">
+                <label class="radio-container">
+                    <input type="radio" name="search-type" value="agent" checked>
+                    <span class="radio-label">按人名搜索</span>
+                </label>
+                <label class="radio-container">
+                    <input type="radio" name="search-type" value="county">
+                    <span class="radio-label">按县名搜索</span>
+                </label>
+            </div>
+            <div class="search-input-container">
+                <input type="text" id="search-input" placeholder="请输入搜索内容">
+                <button id="do-search-btn">搜索</button>
+            </div>
+            <div id="search-result" class="search-result hidden">
+                <p id="search-result-text"></p>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
