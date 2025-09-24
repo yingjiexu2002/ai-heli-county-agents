@@ -260,6 +260,52 @@ def token_required(f):
     
     return decorated
 
+# 允许未登录用户访问，但区分权限的装饰器
+def optional_token(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        current_user = None
+        is_admin = False
+        
+        # 从请求头中获取token
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:]
+        
+        # 如果有token，尝试解析
+        if token:
+            try:
+                # 解码token
+                data = jwt.decode(
+                    token, 
+                    app.config['SECRET_KEY'], 
+                    algorithms=['HS256'],
+                    options={
+                        'verify_signature': True,
+                        'verify_exp': True,
+                        'verify_nbf': True,
+                        'verify_iat': True,
+                        'require': ['exp', 'iat', 'username']
+                    }
+                )
+                
+                current_user = data['username']
+                
+                # 检查用户是否存在
+                if current_user in users:
+                    is_admin = users.get(current_user, {}).get('is_admin', False)
+            except Exception as e:
+                # 如果token解析失败，视为未登录用户
+                app.logger.warning(f'Token解析失败: {str(e)}')
+                pass
+        
+        # 无论token是否有效，都允许访问，但传递不同的用户状态
+        return f(current_user, is_admin, *args, **kwargs)
+    
+    return decorated
+
 # 验证管理员权限的装饰器
 def admin_required(f):
     @wraps(f)
@@ -517,9 +563,36 @@ def login():
     })
 
 # 路由：获取所有县总代数据
-@app.route('/api/agents')
-def get_agents():
+@app.route('/api/agents', methods=['GET'])
+@optional_token
+def get_agents(current_user, is_admin):
     agents_data = load_agent_data()
+    
+    # 如果不是管理员，对数据进行脱敏处理
+    if not is_admin:
+        masked_agents_data = {}
+        for province in agents_data:
+            masked_agents_data[province] = {}
+            for city in agents_data[province]:
+                masked_agents_data[province][city] = {}
+                for county in agents_data[province][city]:
+                    county_data = agents_data[province][city][county]
+                    # 复制县总代数据并进行脱敏
+                    masked_county_data = county_data.copy()
+                    if 'name' in masked_county_data and masked_county_data['name']:
+                        # 只保留姓氏，其余用*替代
+                        name = masked_county_data['name']
+                        masked_county_data['name'] = name[0] + '*' * (len(name) - 1) if len(name) > 1 else name
+                    
+                    if 'phone' in masked_county_data and masked_county_data['phone']:
+                        # 只保留手机号前3位，其余用*替代
+                        phone = masked_county_data['phone']
+                        masked_county_data['phone'] = phone[:3] + ' **** ****' if len(phone) >= 3 else phone
+                    
+                    masked_agents_data[province][city][county] = masked_county_data
+        
+        # 使用脱敏后的数据
+        agents_data = masked_agents_data
     
     # 生成新的CSRF令牌
     new_csrf_token = generate_csrf_token()
@@ -528,6 +601,7 @@ def get_agents():
     response_data = {
         'status': 'success',
         'data': agents_data,
+        'is_admin': is_admin,
         'csrf_token': new_csrf_token
     }
     return Response(
@@ -537,7 +611,8 @@ def get_agents():
 
 # 路由：获取单个县信息
 @app.route('/api/county/<county_name>', methods=['GET'])
-def get_county(county_name):
+@optional_token
+def get_county(current_user, is_admin, county_name):
     csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -556,6 +631,17 @@ def get_county(county_name):
                 if len(row) > county_col and row[county_col].strip() == county_name:
                     agent_name = row[name_col].strip() if len(row) > name_col and row[name_col].strip() else ''
                     agent_phone = row[phone_col].strip() if len(row) > phone_col and row[phone_col].strip() else ''
+                    
+                    # 如果不是管理员，对数据进行脱敏处理
+                    if not is_admin:
+                        if agent_name:
+                            # 只保留姓氏，其余用*替代
+                            agent_name = agent_name[0] + '*' * (len(agent_name) - 1) if len(agent_name) > 1 else agent_name
+                        
+                        if agent_phone:
+                            # 只保留手机号前3位，其余用*替代
+                            agent_phone = agent_phone[:3] + ' **** ****' if len(agent_phone) >= 3 else agent_phone
+                    
                     # 使用Flask的Response直接返回JSON，确保中文不被转义
                     response_data = {
                         'status': 'success',
@@ -565,6 +651,7 @@ def get_county(county_name):
                             'agent_phone': agent_phone,
                             'has_agent': bool(agent_name)  # 只要有姓名就算有县总代
                         },
+                        'is_admin': is_admin,
                         'csrf_token': generate_csrf_token()
                     }
                     return Response(

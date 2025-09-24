@@ -278,11 +278,44 @@ async function loadAgentsData() {
             headers,
             cache: 'no-cache' // 禁用缓存
         });
+        
+        if (!response.ok) {
+            // 如果响应不成功，可能是权限问题
+            if (response.status === 401) {
+                console.log('未授权访问，可能需要重新登录');
+                // 清除管理员状态
+                isAdmin = false;
+                localStorage.removeItem('isAdmin');
+                // 更新UI
+                adminPanel.classList.add('hidden');
+                drawerToggleBtn.classList.add('hidden');
+                userInfo.textContent = '请重新登录';
+            }
+            throw new Error(`请求失败: ${response.status}`);
+        }
+        
         const result = await response.json();
         
         if (result.status === 'success') {
             // 存储县总代数据
             window.agentsData = result.data;
+            
+            // 如果返回了is_admin字段，更新本地状态
+            if (result.is_admin !== undefined) {
+                isAdmin = result.is_admin;
+                localStorage.setItem('isAdmin', isAdmin);
+                
+                // 根据管理员权限更新UI
+                if (isAdmin) {
+                    adminPanel.classList.remove('hidden');
+                    drawerToggleBtn.classList.remove('hidden');
+                    userInfo.textContent = '管理员已登录';
+                } else {
+                    adminPanel.classList.add('hidden');
+                    drawerToggleBtn.classList.add('hidden');
+                    userInfo.textContent = '普通用户已登录';
+                }
+            }
             
             // 更新GeoJSON图层，应用县总代数据
             updateGeoJSONWithAgents();
@@ -478,6 +511,18 @@ function showCountyDetails(countyName) {
     // 获取县总代信息
     const agentInfo = getCountyAgentInfo(countyName);
     console.log('获取到的代理信息:', agentInfo);
+    
+    // 添加权限提示信息
+    const permissionNote = document.getElementById('permission-note');
+    if (permissionNote) {
+        if (!isAdmin) {
+            permissionNote.textContent = '(普通用户只能查看脱敏数据)';
+            permissionNote.classList.remove('hidden');
+        } else {
+            permissionNote.textContent = '(管理员可查看完整数据)';
+            permissionNote.classList.remove('hidden');
+        }
+    }
     
     if (agentInfo && agentInfo.has_agent) {
         document.getElementById('agent-name').textContent = agentInfo.name || '暂无';

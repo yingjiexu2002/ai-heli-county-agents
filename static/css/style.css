@@ -116,6 +116,14 @@ main {
     z-index: 1000;
 }
 
+/* 权限提示样式 */
+.permission-note {
+    font-size: 12px;
+    color: #777;
+    font-style: italic;
+    margin-left: 5px;
+}
+
 #info-panel h2 {
     margin-bottom: 15px;
     color: #2c3e50;
