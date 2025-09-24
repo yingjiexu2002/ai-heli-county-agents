@@ -353,8 +353,13 @@ function categorizeCountyData() {
     mappedCounties = [];
     unmappedCounties = [];
     
-    // 获取GeoJSON中的所有县名
-    const geojsonCountyNames = window.geojsonData.features.map(feature => feature.properties.name);
+    // 创建GeoJSON中所有GB代码的映射 (GeoJSON数据中使用gb字段)
+    const geojsonGBCodes = {};
+    window.geojsonData.features.forEach(feature => {
+        if (feature.properties && feature.properties.gb) {
+            geojsonGBCodes[feature.properties.gb] = true;
+        }
+    });
     
     // 遍历所有县总代数据
     for (const province in window.agentsData) {
@@ -367,8 +372,8 @@ function categorizeCountyData() {
                     ...window.agentsData[province][city][county]
                 };
                 
-                // 检查县名是否在GeoJSON中存在
-                if (geojsonCountyNames.includes(county)) {
+                // 检查GB代码是否在GeoJSON中存在
+                if (countyData.gb_code && geojsonGBCodes[countyData.gb_code]) {
                     mappedCounties.push(countyData);
                 } else {
                     unmappedCounties.push(countyData);
@@ -397,11 +402,8 @@ function updateGeoJSONWithAgents() {
 
 // 县区域样式函数
 function styleCounty(feature) {
-    // 获取县名
-    const countyName = feature.properties.name;
-    
-    // 检查是否有县总代
-    const hasAgent = checkCountyHasAgent(countyName);
+    // 检查是否有县总代，传递feature参数以便使用GB代码匹配
+    const hasAgent = checkCountyHasAgent(feature);
     
     return {
         fillColor: hasAgent ? '#27ae60' : '#bdc3c7',
@@ -414,17 +416,22 @@ function styleCounty(feature) {
 }
 
 // 检查县是否有县总代
-function checkCountyHasAgent(countyName) {
-    if (!window.agentsData) return false;
+function checkCountyHasAgent(feature) {
+    if (!window.agentsData || !feature || !feature.properties) return false;
+    
+    // 从feature中获取GB代码 (GeoJSON数据中使用gb字段)
+    const gbCode = feature.properties.gb;
+    if (!gbCode) return false;
     
     // 遍历所有省市县数据查找匹配
     for (const province in window.agentsData) {
         for (const city in window.agentsData[province]) {
             // 遍历该市下的所有县
             for (const county in window.agentsData[province][city]) {
-                // 检查县名是否匹配
-                if (county === countyName) {
-                    return window.agentsData[province][city][county].has_agent;
+                // 只检查GB代码是否匹配
+                const countyData = window.agentsData[province][city][county];
+                if (countyData.gb_code && countyData.gb_code === gbCode) {
+                    return countyData.has_agent;
                 }
             }
         }
@@ -434,18 +441,22 @@ function checkCountyHasAgent(countyName) {
 }
 
 // 获取县总代信息
-function getCountyAgentInfo(countyName) {
-    if (!window.agentsData) return null;
+function getCountyAgentInfo(countyName, feature) {
+    if (!window.agentsData || !feature || !feature.properties) return null;
+    
+    // 从feature中获取GB代码 (GeoJSON数据中使用gb字段)
+    const gbCode = feature.properties.gb;
+    if (!gbCode) return null;
     
     // 遍历所有省市县数据查找匹配
     for (const province in window.agentsData) {
         for (const city in window.agentsData[province]) {
             // 遍历该市下的所有县
             for (const county in window.agentsData[province][city]) {
-                // 检查县名是否匹配
-                if (county === countyName) {
+                // 只检查GB代码是否匹配
+                const countyData = window.agentsData[province][city][county];
+                if (countyData.gb_code && countyData.gb_code === gbCode) {
                     // 添加省份信息到返回数据中
-                    const countyData = window.agentsData[province][city][county];
                     countyData.province = province;
                     countyData.city = city;
                     return countyData;
@@ -460,7 +471,7 @@ function getCountyAgentInfo(countyName) {
 // 为每个县添加交互
 function onEachCounty(feature, layer) {
     const countyName = feature.properties.name;
-    const agentInfo = getCountyAgentInfo(countyName);
+    const agentInfo = getCountyAgentInfo(countyName, feature);
     
     // 添加弹出框
     layer.bindPopup(() => {
@@ -503,13 +514,14 @@ function onEachCounty(feature, layer) {
             selectedCounty = layer;
             
             // 直接显示县详情，省略点击查看详情按钮的步骤
-            showCountyDetails(countyName);
+            // 传递feature参数以便使用GB代码匹配
+            showCountyDetails(countyName, feature);
         }
     });
 }
 
 // 显示县详细信息
-function showCountyDetails(countyName) {
+function showCountyDetails(countyName, feature) {
     // 显示信息面板
     infoPanel.classList.remove('hidden');
     
@@ -517,8 +529,8 @@ function showCountyDetails(countyName) {
     document.getElementById('county-name').textContent = countyName || '未知';
     console.log('显示县详情:', countyName);
     
-    // 获取县总代信息
-    const agentInfo = getCountyAgentInfo(countyName);
+    // 获取县总代信息，传递feature参数以便使用GB代码匹配
+    const agentInfo = getCountyAgentInfo(countyName, feature);
     console.log('获取到的代理信息:', agentInfo);
     
     // 添加权限提示信息
@@ -1293,96 +1305,83 @@ function searchByAgentName(agentName) {
 
 // 按县名搜索
 function searchByCountyName(countyName) {
-    // 检查是否有GeoJSON数据
-    if (!window.geojsonData || !window.geojsonData.features) {
-        showSearchResult('地图数据加载失败，请刷新页面重试', 'error');
+    if (!window.geojsonData) {
+        showSearchResult('地图数据未加载', 'error');
         return;
     }
     
-    // 在GeoJSON数据中查找匹配的县名
-    const features = window.geojsonData.features;
-    let found = false;
-    let matchedFeature = null;
+    // 查找匹配的县
+    const matchedCounties = window.geojsonData.features.filter(feature => 
+        feature.properties && 
+        feature.properties.name && 
+        feature.properties.name.includes(countyName)
+    );
     
-    for (const feature of features) {
-        if (feature.properties && feature.properties.name && feature.properties.name.includes(countyName)) {
-            found = true;
-            matchedFeature = feature;
-            break;
-        }
-    }
-    
-    if (!found) {
-        showSearchResult('县名填写有误', 'error');
+    if (matchedCounties.length === 0) {
+        showSearchResult('未找到匹配的县', 'error');
         return;
     }
     
-    // 在地图上定位到对应的县
-    locateCountyOnMap(matchedFeature.properties.name);
+    if (matchedCounties.length === 1) {
+        // 精确匹配，直接定位
+        locateCountyOnMap(matchedCounties[0].properties.name);
+        showSearchResult(`已定位到 ${matchedCounties[0].properties.name}`, 'success');
+    } else {
+        // 多个匹配结果，但只高亮第一个
+        locateCountyOnMap(matchedCounties[0].properties.name);
+        let resultText = `找到 ${matchedCounties.length} 个匹配的县，已定位到第一个:<br>`;
+        matchedCounties.forEach((feature, index) => {
+            resultText += `${index + 1}. ${feature.properties.name}<br>`;
+        });
+        resultText += '<br>请提供更具体的县名进行搜索。';
+        showSearchResult(resultText, 'info');
+    }
 }
 
-// 在地图上定位到指定县
+// 在地图上定位县
 function locateCountyOnMap(countyName) {
-    // 检查是否有GeoJSON图层
-    if (!geojsonLayer) {
-        showSearchResult('地图图层加载失败，请刷新页面重试', 'error');
-        return;
-    }
+    if (!window.geojsonData) return;
     
-    let found = false;
-    let targetLayer = null;
-    
-    // 遍历GeoJSON图层中的所有县
-    geojsonLayer.eachLayer((layer) => {
-        const feature = layer.feature;
-        if (feature && feature.properties && feature.properties.name === countyName) {
-            found = true;
-            targetLayer = layer;
+    // 遍历GeoJSON数据查找匹配的县
+    window.geojsonData.features.some(feature => {
+        if (feature.properties && 
+            feature.properties.name === countyName) {
+            
+            // 获取图层 (GeoJSON数据中使用gb字段)
+            const layer = window.geojsonLayer.getLayers().find(l => 
+                l.feature.properties.gb === feature.properties.gb
+            );
+            
+            if (layer) {
+                // 重置所有图层样式
+                window.geojsonLayer.eachLayer(l => {
+                    l.setStyle(styleCounty(l.feature));
+                });
+                
+                // 高亮显示匹配的图层
+                layer.setStyle({
+                    fillColor: '#ff0000',
+                    color: '#ff0000',
+                    weight: 2,
+                    fillOpacity: 0.7
+                });
+                
+                // 添加闪烁效果
+                createBlinkEffect(layer);
+                
+                // 显示县详情
+                showCountyDetails(feature.properties.name, feature);
+                
+                // 缩放到县位置
+                map.fitBounds(layer.getBounds(), {
+                    padding: [50, 50]
+                });
+                
+                return true; // 找到后停止遍历
+            }
         }
+        return false;
     });
-    
-    if (!found || !targetLayer) {
-        showSearchResult('县级信息映射错误，请检查', 'error');
-        return;
-    }
-    
-    // 重置之前选中的县样式
-    if (selectedCounty) {
-        geojsonLayer.resetStyle(selectedCounty);
-    }
-    
-    // 设置新选中的县
-    selectedCounty = targetLayer;
-    
-    // 获取县的边界框并定位地图
-    const bounds = targetLayer.getBounds();
-    map.fitBounds(bounds, {
-        padding: [100, 100], // 增加内边距，使缩放更合适
-        maxZoom: 8, // 降低最大缩放级别，避免放得太大
-        animate: true // 使用动画效果
-    });
-    
-    // 设置高亮样式
-    targetLayer.setStyle({
-        weight: 3,
-        color: '#3498db',
-        dashArray: '',
-        fillOpacity: 0.7
-    });
-    
-    // 创建闪烁效果
-    createBlinkEffect(targetLayer);
-    
-    // 显示县详情
-    showCountyDetails(countyName);
-    
-    // 显示搜索成功结果
-    showSearchResult(`已定位到 ${countyName}`, 'success');
-    
-    // 3秒后关闭搜索浮窗
-    setTimeout(() => {
-        searchModal.classList.add('hidden');
-    }, 3000);
 }
 
 // 创建闪烁效果

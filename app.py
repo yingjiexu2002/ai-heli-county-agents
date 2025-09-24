@@ -137,6 +137,16 @@ def validate_csrf_token(token):
 def load_agent_data():
     agents_data = {}
     csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
+    gb_code_path = get_data_path('data/china_administrative_divisions_nested_2024.json')
+    
+    # 加载GB代码数据
+    gb_codes = {}
+    try:
+        with open(gb_code_path, 'r', encoding='utf-8') as f:
+            gb_codes = json.load(f)
+    except Exception as e:
+        app.logger.error(f'加载GB代码数据失败: {str(e)}')
+    
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
@@ -183,11 +193,17 @@ def load_agent_data():
                     existing_agent = agents_data[province][city][county]['name']
                     app.logger.warning(f'数据覆盖警告: 省份[{province}] 城市[{city}] 县[{county}] 的县总代数据从 [{existing_agent}] 被覆盖为 [{agent_name}]')
                 
+                # 查找GB代码
+                gb_code = None
+                if province in gb_codes and city in gb_codes[province] and county in gb_codes[province][city]:
+                    gb_code = gb_codes[province][city][county]
+                
                 # 只要有姓名就算有县总代，包括只有姓名没有电话的情况
                 agents_data[province][city][county] = {
                     'name': agent_name,
                     'phone': phone,
-                    'has_agent': bool(agent_name)
+                    'has_agent': bool(agent_name),
+                    'gb_code': gb_code
                 }
 
     except FileNotFoundError:
@@ -919,11 +935,12 @@ def update_county(current_user, is_admin, county_name):
 @app.route('/api/geojson', methods=['GET'])
 def get_geojson():
     try:
+        # 加载GeoJSON数据
         with open(get_data_path('data/中国_县.geojson'), 'r', encoding='utf-8') as f:
             geojson_data = json.load(f)
         
-        # 为了保持前端兼容性，直接返回GeoJSON数据
-        # 但在响应头中添加CSRF令牌
+        # GeoJSON数据本身已经包含了GB代码，直接返回即可
+        # 在响应头中添加CSRF令牌
         response = jsonify(geojson_data)
         response.headers['X-CSRF-Token'] = generate_csrf_token()
         return response
