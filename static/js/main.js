@@ -1264,6 +1264,8 @@ function searchByAgentName(agentName) {
     let countyName = null;
     let provinceName = null;
     let cityName = null;
+    let gbCode = null;
+    let matchedAgentData = null;
     
     // 遍历省份
     for (const province in window.agentsData) {
@@ -1278,8 +1280,10 @@ function searchByAgentName(agentName) {
                     countyName = county;
                     provinceName = province;
                     cityName = city;
+                    gbCode = countyData.gb_code;
+                    matchedAgentData = countyData;
                     
-                    console.log('找到县总代:', countyData.name, '所在县:', countyName);
+                    console.log('找到县总代:', countyData.name, '所在县:', countyName, 'GB代码:', gbCode);
                     // 找到匹配项后跳出循环
                     break;
                 }
@@ -1299,8 +1303,32 @@ function searchByAgentName(agentName) {
         return;
     }
     
-    // 在地图上查找并定位到对应的县
-    locateCountyOnMap(countyName);
+    if (!gbCode || gbCode === '') {
+        showSearchResult('县级信息映射错误，请检查', 'error');
+        return;
+    }
+    
+    // 检查GB代码是否能在GeoJSON数据中找到
+    let foundInGeoJSON = false;
+    let targetCountyName = null;
+    
+    if (window.geojsonData) {
+        for (const feature of window.geojsonData.features) {
+            if (feature.properties && feature.properties.gb === gbCode) {
+                foundInGeoJSON = true;
+                targetCountyName = feature.properties.name;
+                break;
+            }
+        }
+    }
+    
+    if (!foundInGeoJSON) {
+        showSearchResult('县级信息映射错误，请检查', 'error');
+        return;
+    }
+    
+    // 在地图上查找并定位到对应的县，使用GB编号以确保准确性
+    locateCountyOnMap(targetCountyName, gbCode);
 }
 
 // 按县名搜索
@@ -1310,59 +1338,117 @@ function searchByCountyName(countyName) {
         return;
     }
     
-    // 查找匹配的县
+    // 查找匹配的县，使用精确匹配而不是模糊匹配
     const matchedCounties = window.geojsonData.features.filter(feature => 
         feature.properties && 
         feature.properties.name && 
-        feature.properties.name.includes(countyName)
+        feature.properties.name === countyName
     );
     
+    // 如果没有精确匹配，再尝试模糊匹配
     if (matchedCounties.length === 0) {
-        showSearchResult('未找到匹配的县', 'error');
-        return;
+        const fuzzyMatchedCounties = window.geojsonData.features.filter(feature => 
+            feature.properties && 
+            feature.properties.name && 
+            feature.properties.name.includes(countyName)
+        );
+        
+        if (fuzzyMatchedCounties.length === 0) {
+            showSearchResult('县名填写有误', 'error');
+            return;
+        } else {
+            // 有模糊匹配结果，让用户选择
+            showCountySelectionDialog(fuzzyMatchedCounties);
+            return;
+        }
     }
     
     if (matchedCounties.length === 1) {
-        // 精确匹配，直接定位
-        locateCountyOnMap(matchedCounties[0].properties.name);
+        // 精确匹配，直接定位，使用GB编号以确保准确性
+        locateCountyOnMap(matchedCounties[0].properties.name, matchedCounties[0].properties.gb);
         showSearchResult(`已定位到 ${matchedCounties[0].properties.name}`, 'success');
     } else {
-        // 多个匹配结果，但只高亮第一个
-        locateCountyOnMap(matchedCounties[0].properties.name);
-        let resultText = `找到 ${matchedCounties.length} 个匹配的县，已定位到第一个:<br>`;
-        matchedCounties.forEach((feature, index) => {
-            resultText += `${index + 1}. ${feature.properties.name}<br>`;
-        });
-        resultText += '<br>请提供更具体的县名进行搜索。';
-        showSearchResult(resultText, 'info');
+        // 多个精确匹配结果，让用户选择
+        showCountySelectionDialog(matchedCounties);
     }
 }
 
+// 显示县选择对话框
+function showCountySelectionDialog(countyFeatures) {
+    // 清空之前的搜索结果
+    searchResultText.innerHTML = '';
+    
+    // 显示标题
+    const title = document.createElement('p');
+    title.textContent = `找到 ${countyFeatures.length} 个匹配的县，请选择：`;
+    searchResultText.appendChild(title);
+    
+    // 创建选择按钮
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'county-selection-buttons';
+    
+    countyFeatures.forEach((feature, index) => {
+        const button = document.createElement('button');
+        button.className = 'county-selection-btn';
+        button.textContent = feature.properties.name;
+        
+        // 检查该县是否有总代，设置相应的颜色
+        const hasAgent = checkCountyHasAgent(feature);
+        if (hasAgent) {
+            // 有总代，使用绿色背景
+            button.style.backgroundColor = '#27ae60';
+            button.style.color = 'white';
+        } else {
+            // 无总代，使用灰色背景
+            button.style.backgroundColor = '#bdc3c7';
+            button.style.color = '#333';
+        }
+        
+        // 添加点击事件，使用IIFE（立即执行函数表达式）来捕获当前的feature值
+        button.addEventListener('click', ((currentFeature) => {
+            return () => {
+                locateCountyOnMap(currentFeature.properties.name, currentFeature.properties.gb);
+                showSearchResult(`已定位到 ${currentFeature.properties.name}`, 'success');
+            };
+        })(feature));
+        
+        buttonContainer.appendChild(button);
+    });
+    
+    searchResultText.appendChild(buttonContainer);
+    
+    // 显示搜索结果
+    searchResult.classList.remove('hidden', 'error', 'success');
+    searchResult.classList.add('info');
+}
+
 // 在地图上定位县
-function locateCountyOnMap(countyName) {
-    if (!window.geojsonData) return;
+function locateCountyOnMap(countyName, gbCode = null) {
+    if (!window.geojsonData || !geojsonLayer) return;
     
     // 遍历GeoJSON数据查找匹配的县
     window.geojsonData.features.some(feature => {
+        // 如果提供了GB代码，优先使用GB代码匹配，否则使用县名匹配
         if (feature.properties && 
-            feature.properties.name === countyName) {
+            ((gbCode && feature.properties.gb === gbCode) || 
+             (!gbCode && feature.properties.name === countyName))) {
             
             // 获取图层 (GeoJSON数据中使用gb字段)
-            const layer = window.geojsonLayer.getLayers().find(l => 
+            const layer = geojsonLayer.getLayers().find(l => 
                 l.feature.properties.gb === feature.properties.gb
             );
             
             if (layer) {
                 // 重置所有图层样式
-                window.geojsonLayer.eachLayer(l => {
+                geojsonLayer.eachLayer(l => {
                     l.setStyle(styleCounty(l.feature));
                 });
                 
                 // 高亮显示匹配的图层
                 layer.setStyle({
-                    fillColor: '#ff0000',
-                    color: '#ff0000',
-                    weight: 2,
+                    weight: 3,
+                    color: '#3498db',
+                    dashArray: '',
                     fillOpacity: 0.7
                 });
                 
@@ -1372,9 +1458,12 @@ function locateCountyOnMap(countyName) {
                 // 显示县详情
                 showCountyDetails(feature.properties.name, feature);
                 
-                // 缩放到县位置
-                map.fitBounds(layer.getBounds(), {
-                    padding: [50, 50]
+                // 缩放到县位置，减小放大级别
+                const bounds = layer.getBounds();
+                map.fitBounds(bounds, {
+                    padding: [100, 100], // 增加内边距，使缩放更合适
+                    maxZoom: 8, // 降低最大缩放级别，避免放得太大
+                    animate: true // 使用动画效果
                 });
                 
                 return true; // 找到后停止遍历
@@ -1419,7 +1508,21 @@ function createBlinkEffect(layer) {
 
 // 显示搜索结果
 function showSearchResult(message, type = 'info') {
+    // 清空之前的内容
+    searchResultText.innerHTML = '';
+    
+    // 检查消息是文本还是HTML元素
+    if (typeof message === 'string') {
+        // 检查是否包含HTML标签
+        if (message.includes('<br>') || message.includes('<div>') || message.includes('<button>')) {
+            searchResultText.innerHTML = message;
+        } else {
+            searchResultText.textContent = message;
+        }
+    } else if (message instanceof Node) {
+        searchResultText.appendChild(message);
+    }
+    
     searchResult.classList.remove('hidden', 'error', 'success');
     searchResult.classList.add(type);
-    searchResultText.textContent = message;
 }

@@ -697,3 +697,28 @@ table tr:hover {
     background-color: #e6ffe6;
     color: #27ae60;
 }
+
+/* 县选择按钮容器样式 */
+.county-selection-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* 县选择按钮样式 */
+.county-selection-btn {
+    background-color: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.county-selection-btn:hover {
+    background-color: #3498db;
+    color: white;
+    border-color: #3498db;
+}
