@@ -815,13 +815,24 @@ def add_county(current_user, is_admin):
     gdp = data.get('gdp', '')  # 获取GDP，默认为空
     population = data.get('population', '')  # 获取人口，默认为空
 
+    # 检查省+市+县是否已存在
+    agents_data = load_agent_data()
+    if province in agents_data and city in agents_data[province] and county in agents_data[province][city]:
+        existing_agent = agents_data[province][city][county]['name']
+        if existing_agent:
+            return jsonify({
+                'status': 'error',
+                'message': '当前县已有总代，禁止添加',
+                'csrf_token': generate_csrf_token()
+            }), 400
+
     try:
         # 记录操作日志
         app.logger.info(f'用户 {current_user} 正在添加新的县总代数据: {province}-{city}-{county}')
 
         # 读取现有的CSV文件
         csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
-        new_row = [agent_name, agent_phone, province, city, county, '', ''] # GDP和人口留空
+        new_row = [agent_name, agent_phone, province, city, county, gdp, population]
 
         # 将新数据追加到CSV文件
         with open(csv_path, 'a', newline='', encoding='utf-8') as f:
@@ -868,6 +879,36 @@ def update_county(current_user, is_admin, county_name):
             'csrf_token': generate_csrf_token()
         }), 400
     
+    # 获取新的省、市、县信息
+    new_province = data.get('province', '').strip()
+    new_city = data.get('city', '').strip()
+    new_county = data.get('county', '').strip()
+    new_agent_name = data.get('agent_name', '').strip()
+    new_agent_phone = data.get('agent_phone', '').strip()
+    
+    # 验证必要字段
+    if not new_agent_name or not new_agent_phone:
+        return jsonify({
+            'status': 'error',
+            'message': '请提供县总代姓名和电话',
+            'csrf_token': generate_csrf_token()
+        }), 400
+    
+    # 如果提供了新的省、市、县信息，则进行重复检查
+    if new_province and new_city and new_county:
+        # 检查是否与当前正在更新的县相同（允许更新当前县的信息）
+        if new_county != county_name or new_province != data.get('old_province', '') or new_city != data.get('old_city', ''):
+            # 检查新的省+市+县是否已存在
+            agents_data = load_agent_data()
+            if new_province in agents_data and new_city in agents_data[new_province] and new_county in agents_data[new_province][new_city]:
+                existing_agent = agents_data[new_province][new_city][new_county]['name']
+                if existing_agent:
+                    return jsonify({
+                        'status': 'error',
+                        'message': '当前县已有总代，禁止编辑',
+                        'csrf_token': generate_csrf_token()
+                    }), 400
+    
     csv_path = get_data_path('data/爱河狸数据_地址拆分.csv')
     try:
         app.logger.info(f'用户 {current_user} 正在更新县 {county_name} 的总代信息')
@@ -884,25 +925,46 @@ def update_county(current_user, is_admin, county_name):
                 name_col = header.index('县总代')
                 phone_col = header.index('联系电话')
                 county_col = header.index('县名')
+                province_col = header.index('省份')
+                city_col = header.index('城市')
             except ValueError:
                 name_col, phone_col, county_col = 0, 1, 4
+                province_col, city_col = 2, 3
 
             for row in reader:
                 if len(row) > county_col and row[county_col].strip() == county_name:
                     old_name = row[name_col]
                     old_phone = row[phone_col]
-                    row[name_col] = data['agent_name']
-                    row[phone_col] = data['agent_phone']
+                    old_province = row[province_col] if len(row) > province_col else ''
+                    old_city = row[city_col] if len(row) > city_col else ''
+                    
+                    # 更新信息
+                    row[name_col] = new_agent_name
+                    row[phone_col] = new_agent_phone
+                    
+                    # 如果提供了新的省、市、县信息，则更新
+                    if new_province:
+                        row[province_col] = new_province
+                    if new_city:
+                        row[city_col] = new_city
+                    if new_county:
+                        row[county_col] = new_county
+                    
                     county_found = True
-                    app.logger.info(f'更新县总代信息: 县[{county_name}] 的县总代从 [{old_name}/{old_phone}] 更新为 [{data["agent_name"]}/{data["agent_phone"]}]')
+                    app.logger.info(f'更新县总代信息: 县[{county_name}] 的县总代从 [{old_name}/{old_phone}] 更新为 [{new_agent_name}/{new_agent_phone}]')
+                    # 如果省、市、县有变化，也记录日志
+                    if old_province != row[province_col] or old_city != row[city_col] or county_name != row[county_col]:
+                        app.logger.info(f'更新县位置信息: 从 [{old_province}/{old_city}/{county_name}] 更新为 [{row[province_col]}/{row[city_col]}/{row[county_col]}]')
                 rows.append(row)
 
         if not county_found:
-            province = data.get('province', '') if data.get('province', '') else '未知省份'
-            city = data.get('city', '') if data.get('city', '') else '未知城市'
-            new_row = [data['agent_name'], data['agent_phone'], province, city, county_name, '', '']
+            # 如果没有找到县，则添加新的记录
+            province = new_province if new_province else data.get('province', '') if data.get('province', '') else '未知省份'
+            city = new_city if new_city else data.get('city', '') if data.get('city', '') else '未知城市'
+            county = new_county if new_county else county_name
+            new_row = [new_agent_name, new_agent_phone, province, city, county, '', '']
             rows.append(new_row)
-            app.logger.info(f'在更新过程中添加新县总代: 省份[{province}] 城市[{city}] 县[{county_name}] 县总代[{data["agent_name"]}/{data["agent_phone"]}]')
+            app.logger.info(f'在更新过程中添加新县总代: 省份[{province}] 城市[{city}] 县[{county}] 县总代[{new_agent_name}/{new_agent_phone}]')
 
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)

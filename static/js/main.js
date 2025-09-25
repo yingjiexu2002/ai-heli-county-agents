@@ -56,6 +56,13 @@ function initDOMElements() {
     doSearchBtn = document.getElementById('do-search-btn');
     searchResult = document.getElementById('search-result');
     searchResultText = document.getElementById('search-result-text');
+    searchTypeRadios = document.querySelectorAll('input[name="search-type"]');
+    
+    // 新增的DOM元素引用
+    editProvince = document.getElementById('edit-province');
+    editCity = document.getElementById('edit-city');
+    editCounty = document.getElementById('edit-county');
+    searchResultText = document.getElementById('search-result-text');
     searchTypeRadios = document.getElementsByName('search-type');
     
     console.log('初始化DOM元素:');
@@ -520,17 +527,33 @@ function onEachCounty(feature, layer) {
     });
 }
 
-// 显示县详细信息
-function showCountyDetails(countyName, feature) {
+// 显示县详情
+function showCountyDetails(countyName, feature = null) {
+    console.log('显示县详情:', countyName);
+    
     // 显示信息面板
     infoPanel.classList.remove('hidden');
     
     // 设置县名
-    document.getElementById('county-name').textContent = countyName || '未知';
-    console.log('显示县详情:', countyName);
+    document.getElementById('county-name').textContent = countyName;
     
-    // 获取县总代信息，传递feature参数以便使用GB代码匹配
-    const agentInfo = getCountyAgentInfo(countyName, feature);
+    // 查找县的代理信息
+    let agentInfo = null;
+    if (window.agentsData) {
+        // 遍历所有省份、城市查找县
+        outerLoop: for (const province in window.agentsData) {
+            for (const city in window.agentsData[province]) {
+                if (window.agentsData[province][city][countyName]) {
+                    agentInfo = window.agentsData[province][city][countyName];
+                    agentInfo.province = province;
+                    agentInfo.city = city;
+                    agentInfo.county = countyName;
+                    break outerLoop;
+                }
+            }
+        }
+    }
+    
     console.log('获取到的代理信息:', agentInfo);
     
     // 添加权限提示信息
@@ -559,6 +582,9 @@ function showCountyDetails(countyName, feature) {
         
         // 如果是管理员，设置编辑表单的值
         if (isAdmin) {
+            editProvince.value = agentInfo.province || '';
+            editCity.value = agentInfo.city || '';
+            editCounty.value = agentInfo.county || '';
             editAgentName.value = agentInfo.name || '';
             editAgentPhone.value = agentInfo.phone || '';
         }
@@ -568,6 +594,9 @@ function showCountyDetails(countyName, feature) {
         
         // 如果是管理员，清空编辑表单
         if (isAdmin) {
+            editProvince.value = '';
+            editCity.value = '';
+            editCounty.value = countyName || '';
             editAgentName.value = '';
             editAgentPhone.value = '';
         }
@@ -587,6 +616,7 @@ function updateDrawerTables() {
     document.getElementById('unmapped-data-count').textContent = unmappedCounties.length;
 }
 
+// 更新表格数据
 // 更新表格数据
 function updateTable(tableElement, dataArray) {
     const tbody = tableElement.querySelector('tbody');
@@ -660,6 +690,9 @@ function toggleRowEditMode(tr, data) {
         tr.classList.remove('editing');
         
         // 恢复单元格内容
+        cells[0].textContent = data.province || '暂无'; // 省份
+        cells[1].textContent = data.city || '暂无'; // 城市
+        cells[2].textContent = data.county || '暂无'; // 县名
         cells[3].textContent = data.name || '暂无'; // 县总代
         cells[4].textContent = data.phone || '暂无'; // 联系电话
         
@@ -685,6 +718,36 @@ function toggleRowEditMode(tr, data) {
         // 切换到编辑模式
         tr.classList.add('editing');
         
+        // 省份单元格改为输入框
+        const provinceCell = cells[0];
+        provinceCell.innerHTML = '';
+        provinceCell.className = 'edit-cell';
+        const provinceInput = document.createElement('input');
+        provinceInput.type = 'text';
+        provinceInput.value = data.province || '';
+        provinceInput.placeholder = '省份';
+        provinceCell.appendChild(provinceInput);
+        
+        // 城市单元格改为输入框
+        const cityCell = cells[1];
+        cityCell.innerHTML = '';
+        cityCell.className = 'edit-cell';
+        const cityInput = document.createElement('input');
+        cityInput.type = 'text';
+        cityInput.value = data.city || '';
+        cityInput.placeholder = '城市';
+        cityCell.appendChild(cityInput);
+        
+        // 县名单元格改为输入框
+        const countyCell = cells[2];
+        countyCell.innerHTML = '';
+        countyCell.className = 'edit-cell';
+        const countyInput = document.createElement('input');
+        countyInput.type = 'text';
+        countyInput.value = data.county || '';
+        countyInput.placeholder = '县名';
+        countyCell.appendChild(countyInput);
+        
         // 县总代单元格改为输入框
         const agentNameCell = cells[3];
         agentNameCell.innerHTML = '';
@@ -701,6 +764,7 @@ function toggleRowEditMode(tr, data) {
         const phoneInput = document.createElement('input');
         phoneInput.type = 'text';
         phoneInput.value = data.phone || '';
+        phoneInput.placeholder = '联系电话';
         phoneCell.appendChild(phoneInput);
         
         // 修改操作按钮
@@ -713,11 +777,14 @@ function toggleRowEditMode(tr, data) {
         saveBtn.textContent = '保存';
         saveBtn.addEventListener('click', async () => {
             // 获取输入的值
+            const newProvince = provinceInput.value;
+            const newCity = cityInput.value;
+            const newCounty = countyInput.value;
             const newAgentName = agentNameInput.value;
             const newAgentPhone = phoneInput.value;
             
             // 调用API更新数据
-            await updateCountyAgent(data.county, newAgentName, newAgentPhone, tr);
+            await updateCountyAgent(data.county, newAgentName, newAgentPhone, tr, newProvince, newCity, newCounty);
         });
         actionCell.appendChild(saveBtn);
         
@@ -736,9 +803,15 @@ function toggleRowEditMode(tr, data) {
 }
 
 // 更新县总代信息
-async function updateCountyAgent(countyName, agentName, agentPhone, tr) {
+async function updateCountyAgent(countyName, agentName, agentPhone, tr, province='', city='', county='') {
     if (!agentName || !agentPhone) {
         alert('请输入县总代姓名和电话');
+        return;
+    }
+    
+    // 如果提供了省、市、县信息，则需要验证
+    if ((province || city || county) && !(province && city && county)) {
+        alert('请完整填写省份、城市和县名');
         return;
     }
     
@@ -758,14 +831,24 @@ async function updateCountyAgent(countyName, agentName, agentPhone, tr) {
             headers['X-CSRF-Token'] = csrfToken;
         }
         
+        // 构建请求数据
+        const requestData = {
+            agent_name: agentName,
+            agent_phone: agentPhone,
+            csrf_token: csrfToken
+        };
+        
+        // 如果提供了省、市、县信息，则添加到请求数据中
+        if (province && city && county) {
+            requestData.province = province;
+            requestData.city = city;
+            requestData.county = county;
+        }
+        
         const response = await fetch(`/api/county/${countyName}`, {
             method: 'PUT',
             headers: headers,
-            body: JSON.stringify({
-                agent_name: agentName,
-                agent_phone: agentPhone,
-                csrf_token: csrfToken // 在请求体中也包含CSRF令牌
-            })
+            body: JSON.stringify(requestData)
         });
         
         const result = await response.json();
@@ -958,28 +1041,62 @@ function bindEvents() {
         }
         
         const countyNameValue = document.getElementById('county-name').textContent;
-        const newAgentName = editAgentName.value;
-        const newAgentPhone = editAgentPhone.value;
+        const newProvince = editProvince.value.trim();
+        const newCity = editCity.value.trim();
+        const newCounty = editCounty.value.trim();
+        const newAgentName = editAgentName.value.trim();
+        const newAgentPhone = editAgentPhone.value.trim();
         
         if (!newAgentName || !newAgentPhone) {
             alert('请输入县总代姓名和电话');
             return;
         }
         
+        // 如果提供了省、市、县信息，则需要验证
+        if ((newProvince || newCity || newCounty) && !(newProvince && newCity && newCounty)) {
+            alert('请完整填写省份、城市和县名');
+            return;
+        }
+        
         try {
+            // 如果没有CSRF令牌，先获取
+            if (!csrfToken) {
+                await getCsrfToken();
+            }
+            
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'X-CSRF-Token': csrfToken
+            };
+            
+            // 构建请求数据
+            const requestData = {
+                agent_name: newAgentName,
+                agent_phone: newAgentPhone,
+                csrf_token: csrfToken
+            };
+            
+            // 如果提供了省、市、县信息，则添加到请求数据中
+            if (newProvince && newCity && newCounty) {
+                requestData.province = newProvince;
+                requestData.city = newCity;
+                requestData.county = newCounty;
+            }
+            
             const response = await fetch(`/api/county/${countyNameValue}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    agent_name: newAgentName,
-                    agent_phone: newAgentPhone
-                })
+                headers: headers,
+                body: JSON.stringify(requestData)
             });
             
             const result = await response.json();
+            
+            // 如果返回了新的CSRF令牌，更新它
+            if (result.csrf_token) {
+                csrfToken = result.csrf_token;
+                localStorage.setItem('csrfToken', csrfToken);
+            }
             
             if (result.status === 'success') {
                 alert('更新成功');
@@ -1123,6 +1240,11 @@ async function handleAddNewAgent() {
     }
 
     try {
+        // 如果没有CSRF令牌，先获取
+        if (!csrfToken) {
+            await getCsrfToken();
+        }
+        
         const response = await fetch('/api/county', {
             method: 'POST',
             headers: {
@@ -1143,7 +1265,7 @@ async function handleAddNewAgent() {
         });
 
         const result = await response.json();
-
+        
         if (result.status === 'success') {
             alert('新增成功');
             addAgentModal.classList.add('hidden');
