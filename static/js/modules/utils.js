@@ -45,6 +45,9 @@ export function showToast(message, type = 'success') {
     // 强制重绘以触发动画
     void toast.offsetWidth;
     
+    // 添加animate类以触发动画
+    toast.classList.add('animate');
+    
     // 设置动画结束后移除
     setTimeout(() => {
         toast.remove();

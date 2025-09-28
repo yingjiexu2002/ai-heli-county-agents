@@ -572,6 +572,10 @@ table tr:hover {
     opacity: 0;
 }
 
+.toast.animate {
+    opacity: 1;
+}
+
 .toast.success {
     background-color: #27ae60;
 }
