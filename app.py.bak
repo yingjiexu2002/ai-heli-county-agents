@@ -13,11 +13,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import secrets
 from src.utils import get_data_path
-from src.auth import (
-    generate_csrf_token, validate_csrf_token, token_required, optional_token, 
-    admin_required, limit_login_attempts, users, login_attempts, generate_auth_token,
-    authenticate_user, update_user_login_info
-)
 
 
 
@@ -63,6 +58,40 @@ app.config['WTF_CSRF_SECRET_KEY'] = os.environ.get('WTF_CSRF_SECRET_KEY', secret
 
 # 配置JSON编码，确保中文不会被转义为Unicode
 app.config['JSON_AS_ASCII'] = False
+
+# 登录尝试限制
+login_attempts = {}
+MAX_ATTEMPTS = 5
+ATTEMPT_TIMEOUT = 300  # 5分钟
+
+# 模拟用户数据库 - 使用更安全的密码哈希方法
+# 注意：为了与前端加密流程匹配，我们需要存储密码+salt的SHA256哈希值
+import hashlib
+salt = "aiheliSalt2023"
+salted_password = "123456" + salt
+hashed_salted_password = hashlib.sha256(salted_password.encode('utf-8')).hexdigest()
+
+users = {
+    'admin': {
+        # 使用更强的哈希算法和随机盐值
+        'password': generate_password_hash(hashed_salted_password, method='pbkdf2:sha256:150000'),
+        'is_admin': True,
+        'last_login': None,
+        'login_attempts': 0
+    }
+}
+
+# 注意：get_data_path 已上移到文件顶部，避免重复定义
+
+# 生成CSRF令牌
+def generate_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return session['csrf_token']
+
+# 验证CSRF令牌
+def validate_csrf_token(token):
+    return token and 'csrf_token' in session and token == session['csrf_token']
 
 # 加载县总代数据
 def load_agent_data():
@@ -154,6 +183,146 @@ def load_agent_data():
     return agents_data
 
 
+# 验证Token的装饰器
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        
+        # 从请求头中获取token
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:]
+        
+        if not token:
+            return jsonify({'status': 'error', 'message': '缺少认证令牌'}), 401
+        
+        try:
+            # 解码token，添加更多验证选项
+            data = jwt.decode(
+                token, 
+                app.config['SECRET_KEY'], 
+                algorithms=['HS256'],
+                options={
+                    'verify_signature': True,
+                    'verify_exp': True,
+                    'verify_nbf': True,
+                    'verify_iat': True,
+                    'require': ['exp', 'iat', 'username']
+                }
+            )
+            
+            current_user = data['username']
+            
+            # 检查用户是否存在
+            if current_user not in users:
+                return jsonify({'status': 'error', 'message': '用户不存在'}), 401
+                
+            is_admin = users.get(current_user, {}).get('is_admin', False)
+            
+            # 检查令牌是否在黑名单中（如果实现了令牌撤销功能）
+            # 这里可以添加令牌黑名单检查逻辑
+            
+        except jwt.ExpiredSignatureError:
+            return jsonify({'status': 'error', 'message': '令牌已过期，请重新登录'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'status': 'error', 'message': '无效的令牌'}), 401
+        except Exception as e:
+            return jsonify({'status': 'error', 'message': f'认证失败: {str(e)}'}), 401
+        
+        # 将用户信息传递给被装饰的函数
+        return f(current_user, is_admin, *args, **kwargs)
+    
+    return decorated
+
+# 允许未登录用户访问，但区分权限的装饰器
+def optional_token(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        current_user = None
+        is_admin = False
+        
+        # 从请求头中获取token
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:]
+        
+        # 如果有token，尝试解析
+        if token:
+            try:
+                # 解码token
+                data = jwt.decode(
+                    token, 
+                    app.config['SECRET_KEY'], 
+                    algorithms=['HS256'],
+                    options={
+                        'verify_signature': True,
+                        'verify_exp': True,
+                        'verify_nbf': True,
+                        'verify_iat': True,
+                        'require': ['exp', 'iat', 'username']
+                    }
+                )
+                
+                current_user = data['username']
+                
+                # 检查用户是否存在
+                if current_user in users:
+                    is_admin = users.get(current_user, {}).get('is_admin', False)
+            except Exception as e:
+                # 如果token解析失败，视为未登录用户
+                app.logger.warning(f'Token解析失败: {str(e)}')
+                pass
+        
+        # 无论token是否有效，都允许访问，但传递不同的用户状态
+        return f(current_user, is_admin, *args, **kwargs)
+    
+    return decorated
+
+# 验证管理员权限的装饰器
+def admin_required(f):
+    @wraps(f)
+    def decorated(current_user, is_admin, *args, **kwargs):
+        if not is_admin:
+            # 记录未授权访问尝试
+            app.logger.warning(f'未授权的管理员访问尝试: 用户 {current_user} 尝试访问 {request.path}')
+            return jsonify({'status': 'error', 'message': '需要管理员权限'}), 403
+        return f(current_user, is_admin, *args, **kwargs)
+    
+    return decorated
+
+# 请求限制装饰器 - 防止暴力破解
+def limit_login_attempts(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        ip = request.remote_addr
+        current_time = time.time()
+        
+        # 清理过期的尝试记录
+        for attempt_ip in list(login_attempts.keys()):
+            if current_time - login_attempts[attempt_ip]['timestamp'] > ATTEMPT_TIMEOUT:
+                del login_attempts[attempt_ip]
+        
+        # 检查IP是否被锁定
+        if ip in login_attempts and login_attempts[ip]['attempts'] >= MAX_ATTEMPTS:
+            if current_time - login_attempts[ip]['timestamp'] < ATTEMPT_TIMEOUT:
+                # 计算剩余锁定时间
+                remaining = int(ATTEMPT_TIMEOUT - (current_time - login_attempts[ip]['timestamp']))
+                return jsonify({
+                    'status': 'error',
+                    'message': f'登录尝试次数过多，请在{remaining}秒后重试'
+                }), 429
+            else:
+                # 锁定时间已过，重置尝试次数
+                login_attempts[ip]['attempts'] = 0
+        
+        return f(*args, **kwargs)
+    
+    return decorated
+
 # 路由：首页
 @app.route('/')
 def index():
@@ -226,25 +395,132 @@ def login():
     login_attempts[ip]['attempts'] += 1
     login_attempts[ip]['timestamp'] = time.time()
     
+    # 获取用户信息
+    user = users.get(username)
+    
     # 验证用户和密码
-    auth_success, auth_result = authenticate_user(username, encrypted_password)
-    if not auth_success:
-        app.logger.warning(f'登录失败: {auth_result} - 用户 {username} 来自IP {ip}')
-        return jsonify({'status': 'error', 'message': auth_result}), 401
+    if not user:
+        app.logger.warning(f'登录失败: 用户名不存在 - {username} 来自IP {ip}')
+        return jsonify({'status': 'error', 'message': '用户名或密码错误'}), 401
     
-    user = auth_result
-    
-    # 登录成功，重置尝试次数并更新用户信息
-    update_user_login_info(username, ip)
-    
-    # 生成认证令牌
-    token = generate_auth_token(username)
-    if not token:
+    # 解密前端加密的密码
+    try:
+        # 前端使用CryptoJS进行了加密，这里需要解密
+        # 使用与前端相同的盐值和密钥
+        salt = "aiheliSalt2023"
+        secret_key = "aiheli2023SecretKey"
+        
+        # 尝试解密前端加密的密码
+        try:
+            # 使用pycryptodome库解密AES加密的密码
+            from Crypto.Cipher import AES
+            from Crypto.Util.Padding import unpad
+            import base64
+            
+            # CryptoJS AES加密默认使用CBC模式和随机生成的IV
+            # 加密后的数据格式为: Salted__ + 8字节盐值 + 加密数据
+            
+            # 解码前端传来的Base64加密数据
+            encrypted_data = base64.b64decode(encrypted_password)
+            
+            # 检查是否是CryptoJS的Salted格式
+            if encrypted_data[:8] == b'Salted__':
+                # 提取盐值
+                salt_value = encrypted_data[8:16]
+                ciphertext = encrypted_data[16:]
+                
+                # 使用EVP_BytesToKey派生密钥和IV（CryptoJS默认方式）
+                from Crypto.Hash import MD5
+                key_iv = b""
+                while len(key_iv) < 32 + 16:  # 32字节密钥 + 16字节IV
+                    h = MD5.new()
+                    h.update(key_iv[-MD5.digest_size:] if key_iv else b"")
+                    h.update(secret_key.encode('utf-8'))
+                    h.update(salt_value)
+                    key_iv += h.digest()
+                
+                key = key_iv[:32]  # 32字节密钥用于AES-256
+                iv = key_iv[32:32+16]  # 16字节IV
+                
+                # 创建AES解密器
+                cipher = AES.new(key, AES.MODE_CBC, iv)
+                
+                # 解密并去除填充
+                decrypted_data = unpad(cipher.decrypt(ciphertext), AES.block_size)
+                
+                # 获取解密后的哈希值
+                hashed_password = decrypted_data.decode('utf-8')
+            else:
+                # 如果不是Salted格式，尝试使用旧的解密方式
+                # AES解密需要16字节的密钥
+                # 使用与前端相同的密钥处理方式
+                key = secret_key.encode('utf-8')
+                # 如果密钥长度不是16/24/32字节，需要调整
+                if len(key) > 32:
+                    key = key[:32]
+                elif len(key) > 24:
+                    key = key[:24]
+                elif len(key) > 16:
+                    key = key[:16]
+                
+                # 提取IV（前16字节）和加密数据
+                iv = encrypted_data[:16]
+                ciphertext = encrypted_data[16:]
+                
+                # 创建AES解密器
+                cipher = AES.new(key, AES.MODE_CBC, iv)
+                
+                # 解密并去除填充
+                decrypted_data = unpad(cipher.decrypt(ciphertext), AES.block_size)
+                
+                # 获取解密后的哈希值
+                hashed_password = decrypted_data.decode('utf-8')
+            
+            # 验证密码是否正确
+            # 现在数据库中存储的是密码+salt的SHA256哈希值的哈希
+            # 而前端传来的hashed_password也是密码+salt的SHA256哈希值
+            # 两者可以直接比较
+            if not check_password_hash(user['password'], hashed_password):
+                app.logger.warning(f'登录失败: 密码错误 - 用户 {username} 来自IP {ip}')
+                return jsonify({'status': 'error', 'message': '用户名或密码错误'}), 401
+        except Exception as decrypt_error:
+            # 如果解密失败，记录错误并返回错误信息
+            app.logger.error(f'密码解密失败: {str(decrypt_error)}')
+            return jsonify({
+                'status': 'error', 
+                'message': '密码格式错误',
+                'csrf_token': generate_csrf_token()
+            }), 400
+    except Exception as e:
+        app.logger.error(f'密码验证错误: {str(e)}')
+        app.logger.error(f'密码解密或验证失败，可能是加密算法不匹配: {str(e)}')
         return jsonify({
             'status': 'error', 
-            'message': '生成认证令牌失败',
-            'csrf_token': generate_csrf_token()
+            'message': '登录处理失败',
+            'csrf_token': generate_csrf_token() # 返回新的CSRF令牌以便前端继续使用
         }), 500
+    
+    # 登录成功，重置尝试次数
+    if ip in login_attempts:
+        login_attempts[ip]['attempts'] = 0
+    
+    # 更新用户最后登录时间
+    users[username]['last_login'] = datetime.utcnow()
+    users[username]['login_attempts'] = 0
+    
+    # 生成更安全的token
+    now = datetime.utcnow()
+    token_id = str(uuid.uuid4())
+    token_payload = {
+        'username': username,
+        'is_admin': user['is_admin'],
+        'iat': now,
+        'nbf': now,  # Not Before
+        'exp': now + timedelta(hours=24),
+        'jti': token_id  # JWT ID
+    }
+    
+    token = jwt.encode(token_payload, app.config['SECRET_KEY'], algorithm='HS256')
     
     # 记录成功登录
     app.logger.info(f'登录成功: 用户 {username} 来自IP {ip}')
