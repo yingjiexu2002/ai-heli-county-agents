@@ -1,0 +1,1073 @@
+// 导入工具模块
+import { showToast, getCsrfToken, encryptPassword, getCurrentCsrfToken, createToastContainer } from './modules/utils.js';
+import { initMap as createMap, fetchGeoJSON, createOrUpdateGeoLayer, fitToLayer, getGeoJSONLayer, resetFeatureStyle } from './modules/map.js';
+import { loadAgentsData, updateGeoJSONWithAgents, checkCountyHasAgent, getCountyAgentInfo, 
+         findCountyAgent, updateCountyAgent, deleteCounty, addNewCountyAgent, 
+         getMappedCounties, getUnmappedCounties, searchAgentByName, searchCountyByName, initData } from './modules/data.js';
+
+// 全局变量
+let map; // 由 map.js 提供实例
+let selectedCounty = null;
+let isAdmin = false;
+let token = localStorage.getItem('token');
+let csrfToken = getCurrentCsrfToken(); // 从utils模块获取CSRF令牌
+
+// DOM元素
+const loginSection = document.getElementById('login-section');
+const userSection = document.getElementById('user-section');
+const userInfo = document.getElementById('user-info');
+const loginBtn = document.getElementById('login-btn');
+const logoutBtn = document.getElementById('logout-btn');
+const infoPanel = document.getElementById('info-panel');
+const countyName = document.getElementById('county-name');
+const agentName = document.getElementById('agent-name');
+const agentPhone = document.getElementById('agent-phone');
+const adminPanel = document.getElementById('admin-panel');
+const editAgentName = document.getElementById('edit-agent-name');
+const editAgentPhone = document.getElementById('edit-agent-phone');
+const updateBtn = document.getElementById('update-btn');
+const infoPanelCloseBtn = document.getElementById('info-panel-close-btn');
+
+// 抽屉控件DOM元素
+const drawerToggleBtn = document.getElementById('drawer-toggle-btn');
+const adminDrawer = document.getElementById('admin-drawer');
+const drawerCloseBtn = document.getElementById('drawer-close-btn');
+const drawerResizer = document.getElementById('drawer-resizer');
+const mappedDataTable = document.getElementById('mapped-data-table');
+const unmappedDataTable = document.getElementById('unmapped-data-table');
+const mappedDataSection = document.getElementById('mapped-data-section');
+const unmappedDataSection = document.getElementById('unmapped-data-section');
+
+// 新增模态框DOM元素
+const addAgentModal = document.getElementById('add-agent-modal');
+const addNewBtn = document.getElementById('add-new-btn');
+const modalCloseBtn = document.getElementById('modal-close-btn');
+const saveNewAgentBtn = document.getElementById('save-new-agent-btn');
+
+// 搜索相关DOM元素
+let searchBtn, searchModal, searchModalCloseBtn, searchInput, doSearchBtn, searchResult, searchResultText, searchTypeRadios;
+
+// 编辑相关DOM元素
+let editProvince, editCity, editCounty;
+
+// 初始化DOM元素函数
+function initDOMElements() {
+    // 搜索相关DOM元素
+    searchBtn = document.getElementById('search-btn');
+    searchModal = document.getElementById('search-modal');
+    searchModalCloseBtn = document.getElementById('search-modal-close-btn');
+    searchInput = document.getElementById('search-input');
+    doSearchBtn = document.getElementById('do-search-btn');
+    searchResult = document.getElementById('search-result');
+    searchResultText = document.getElementById('search-result-text');
+    searchTypeRadios = document.querySelectorAll('input[name="search-type"]');
+    
+    // 新增的DOM元素引用
+    editProvince = document.getElementById('edit-province');
+    editCity = document.getElementById('edit-city');
+    editCounty = document.getElementById('edit-county');
+    searchResultText = document.getElementById('search-result-text');
+    searchTypeRadios = document.getElementsByName('search-type');
+    
+    console.log('初始化DOM元素:');
+    console.log('searchBtn:', searchBtn);
+    console.log('searchModal:', searchModal);
+    console.log('searchModalCloseBtn:', searchModalCloseBtn);
+}
+
+// 调试输出
+console.log('搜索相关DOM元素:');
+console.log('searchBtn:', searchBtn);
+console.log('searchModal:', searchModal);
+console.log('searchModalCloseBtn:', searchModalCloseBtn);
+console.log('searchInput:', searchInput);
+console.log('doSearchBtn:', doSearchBtn);
+console.log('searchResult:', searchResult);
+console.log('searchResultText:', searchResultText);
+console.log('searchTypeRadios:', searchTypeRadios);
+
+// 初始化抽屉状态和设置函数
+function initDrawerSettings() {
+    adminDrawer.classList.remove('active');
+    
+    // 设置抽屉部分的初始高度
+    const drawerHeight = adminDrawer.offsetHeight;
+    mappedDataSection.style.height = `${drawerHeight / 2}px`;
+    unmappedDataSection.style.height = `${drawerHeight / 2}px`;
+    mappedDataSection.style.flex = 'none';
+    unmappedDataSection.style.flex = 'none';
+}
+
+// 检查认证状态
+function checkAuthStatus() {
+    // 每次刷新UI前都从localStorage同步token和isAdmin
+    token = localStorage.getItem('token');
+    isAdmin = localStorage.getItem('isAdmin') === 'true';
+    if (token) {
+        loginSection.classList.add('hidden');
+        userSection.classList.remove('hidden');
+        userInfo.textContent = '已登录';
+        if (isAdmin) {
+            userInfo.textContent = '管理员已登录';
+            adminPanel.classList.remove('hidden');
+            drawerToggleBtn.classList.remove('hidden');
+        } else {
+            drawerToggleBtn.classList.add('hidden');
+        }
+    } else {
+        loginSection.classList.remove('hidden');
+        userSection.classList.add('hidden');
+        adminPanel.classList.add('hidden');
+        drawerToggleBtn.classList.add('hidden');
+    }
+}
+
+// 地图初始化已迁移至 modules/map.js -> initMap
+
+// 加载GeoJSON数据
+async function loadGeoJSON() {
+    try {
+        const data = await fetchGeoJSON();
+        // 创建/更新图层
+        createOrUpdateGeoLayer(data, styleCounty, onEachCounty);
+        fitToLayer();
+    } catch (e) {
+        console.error('加载GeoJSON数据失败:', e);
+        alert('加载地图数据失败，请刷新页面重试');
+    }
+}
+
+// 加载县总代数据 - 已移至 data.js 模块
+
+// 分类县总代数据为已映射和未映射 - 已移至 data.js 模块
+
+// 更新GeoJSON图层，应用县总代数据 - 已移至 data.js 模块
+
+// 县区域样式函数
+function styleCounty(feature) {
+    // 检查是否有县总代，传递feature参数以便使用GB代码匹配
+    const hasAgent = checkCountyHasAgent(feature);
+    
+    return {
+        fillColor: hasAgent ? '#27ae60' : '#bdc3c7',
+        weight: 1,
+        opacity: 1,
+        color: 'white',
+        dashArray: '3',
+        fillOpacity: 0.7
+    };
+}
+
+// 检查县是否有县总代 - 已移至 data.js 模块
+
+// 获取县总代信息 - 已移至 data.js 模块
+
+// 为每个县添加交互
+function onEachCounty(feature, layer) {
+    const countyName = feature.properties.name;
+    const agentInfo = getCountyAgentInfo(countyName, feature);
+    
+    // 添加弹出框
+    layer.bindPopup(() => {
+        const popupContent = document.createElement('div');
+        popupContent.className = 'county-popup';
+        
+        const title = document.createElement('h3');
+        title.textContent = countyName;
+        popupContent.appendChild(title);
+        
+        const status = document.createElement('p');
+        if (agentInfo && agentInfo.has_agent) {
+            status.innerHTML = `<strong>状态：</strong><span style="color: #27ae60;">已有县总代</span>`;
+        } else {
+            status.innerHTML = `<strong>状态：</strong><span style="color: #e74c3c;">暂无县总代</span>`;
+        }
+        popupContent.appendChild(status);
+        
+        // 移除查看详情按钮，因为点击县区域时已经直接显示详情
+        
+        return popupContent;
+    });
+    
+    // 添加点击事件
+    layer.on({
+        click: () => {
+            // 重置之前选中的县样式
+            if (selectedCounty) {
+                // 使用map.js模块提供的函数重置样式
+                resetFeatureStyle(selectedCounty);
+            }
+            
+            // 设置新选中的县样式
+            layer.setStyle({
+                weight: 3,
+                color: '#3498db',
+                dashArray: '',
+                fillOpacity: 0.7
+            });
+            
+            selectedCounty = layer;
+            
+            // 直接显示县详情，省略点击查看详情按钮的步骤
+            // 传递feature参数以便使用GB代码匹配
+            showCountyDetails(countyName, feature);
+        }
+    });
+}
+
+// 显示县详情
+function showCountyDetails(countyName, feature = null) {
+    console.log('显示县详情:', countyName);
+    
+    // 显示信息面板
+    infoPanel.classList.remove('hidden');
+    
+    // 设置县名
+    document.getElementById('county-name').textContent = countyName;
+    
+    // 查找县的代理信息
+    let agentInfo = null;
+    if (feature) {
+        agentInfo = getCountyAgentInfo(countyName, feature);
+    } else {
+        agentInfo = findCountyAgent(countyName);
+    }
+    
+    console.log('获取到的代理信息:', agentInfo);
+    
+    // 添加权限提示信息
+    const permissionNote = document.getElementById('permission-note');
+    if (permissionNote) {
+        if (!isAdmin) {
+            permissionNote.textContent = '(普通用户只能查看脱敏数据)';
+            permissionNote.classList.remove('hidden');
+        } else {
+            permissionNote.textContent = '(管理员可查看完整数据)';
+            permissionNote.classList.remove('hidden');
+        }
+    }
+    
+    // 设置省份信息
+    const provinceName = document.getElementById('province-name');
+    if (agentInfo && agentInfo.province) {
+        provinceName.textContent = agentInfo.province || '暂无';
+    } else {
+        provinceName.textContent = '暂无';
+    }
+    
+    if (agentInfo && agentInfo.has_agent) {
+        document.getElementById('agent-name').textContent = agentInfo.name || '暂无';
+        document.getElementById('agent-phone').textContent = agentInfo.phone || '暂无';
+        
+        // 如果是管理员，设置编辑表单的值
+        if (isAdmin) {
+            editProvince.value = agentInfo.province || '';
+            editCity.value = agentInfo.city || '';
+            editCounty.value = agentInfo.county || '';
+            editAgentName.value = agentInfo.name || '';
+            editAgentPhone.value = agentInfo.phone || '';
+        }
+    } else {
+        document.getElementById('agent-name').textContent = '暂无';
+        document.getElementById('agent-phone').textContent = '暂无';
+        
+        // 如果是管理员，清空编辑表单
+        if (isAdmin) {
+            editProvince.value = '';
+            editCity.value = '';
+            editCounty.value = countyName || '';
+            editAgentName.value = '';
+            editAgentPhone.value = '';
+        }
+    }
+}
+
+// 更新抽屉中的数据表格
+function updateDrawerTables() {
+    // 从data模块获取数据
+    const mappedCounties = getMappedCounties();
+    const unmappedCounties = getUnmappedCounties();
+    
+    // 更新已映射数据表格
+    updateTable(mappedDataTable, mappedCounties);
+    
+    // 更新未映射数据表格
+    updateTable(unmappedDataTable, unmappedCounties);
+
+    // 更新数据显示条数
+    document.getElementById('mapped-data-count').textContent = mappedCounties.length;
+    document.getElementById('unmapped-data-count').textContent = unmappedCounties.length;
+}
+
+// 更新表格数据
+// 更新表格数据
+function updateTable(tableElement, dataArray) {
+    const tbody = tableElement.querySelector('tbody');
+    tbody.innerHTML = '';
+    
+    dataArray.forEach(data => {
+        const tr = document.createElement('tr');
+        tr.dataset.county = data.county;
+        
+        // 添加省份单元格
+        const provinceTd = document.createElement('td');
+        provinceTd.textContent = data.province;
+        tr.appendChild(provinceTd);
+        
+        // 添加城市单元格
+        const cityTd = document.createElement('td');
+        cityTd.textContent = data.city;
+        tr.appendChild(cityTd);
+        
+        // 添加县名单元格
+        const countyTd = document.createElement('td');
+        countyTd.textContent = data.county;
+        tr.appendChild(countyTd);
+        
+        // 添加县总代单元格
+        const agentNameTd = document.createElement('td');
+        agentNameTd.textContent = data.name || '暂无';
+        tr.appendChild(agentNameTd);
+        
+        // 添加联系电话单元格
+        const phoneTd = document.createElement('td');
+        phoneTd.textContent = data.phone || '暂无';
+        tr.appendChild(phoneTd);
+        
+        // 添加操作单元格
+        const actionTd = document.createElement('td');
+        actionTd.className = 'action-cell';
+        
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-btn';
+        editBtn.textContent = '编辑';
+        editBtn.addEventListener('click', () => {
+            // 将行切换为编辑模式
+            toggleRowEditMode(tr, data);
+        });
+        
+        actionTd.appendChild(editBtn);
+        
+        // 添加删除按钮
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = '删除';
+        deleteBtn.addEventListener('click', async () => {
+            const result = await deleteCounty(data.county);
+            if (result) {
+                handleDeletedCounty(data.county);
+            }
+        });
+        actionTd.appendChild(deleteBtn);
+        
+        tr.appendChild(actionTd);
+        
+        tbody.appendChild(tr);
+    });
+}
+
+// 切换行的编辑模式
+function toggleRowEditMode(tr, data) {
+    const cells = tr.querySelectorAll('td');
+    const isEditing = tr.classList.contains('editing');
+    
+    if (isEditing) {
+        // 已经是编辑模式，切换回显示模式
+        tr.classList.remove('editing');
+        
+        // 恢复单元格内容
+        cells[0].textContent = data.province || '暂无'; // 省份
+        cells[1].textContent = data.city || '暂无'; // 城市
+        cells[2].textContent = data.county || '暂无'; // 县名
+        cells[3].textContent = data.name || '暂无'; // 县总代
+        cells[4].textContent = data.phone || '暂无'; // 联系电话
+        
+        // 恢复操作按钮
+        cells[5].innerHTML = '';
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-btn';
+        editBtn.textContent = '编辑';
+        editBtn.addEventListener('click', () => {
+            toggleRowEditMode(tr, data);
+        });
+        cells[5].appendChild(editBtn);
+
+        // 添加删除按钮
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = '删除';
+        deleteBtn.addEventListener('click', () => {
+            deleteCounty(data.county);
+        });
+        cells[5].appendChild(deleteBtn);
+    } else {
+        // 切换到编辑模式
+        tr.classList.add('editing');
+        
+        // 省份单元格改为输入框
+        const provinceCell = cells[0];
+        provinceCell.innerHTML = '';
+        provinceCell.className = 'edit-cell';
+        const provinceInput = document.createElement('input');
+        provinceInput.type = 'text';
+        provinceInput.value = data.province || '';
+        provinceInput.placeholder = '省份';
+        provinceCell.appendChild(provinceInput);
+        
+        // 城市单元格改为输入框
+        const cityCell = cells[1];
+        cityCell.innerHTML = '';
+        cityCell.className = 'edit-cell';
+        const cityInput = document.createElement('input');
+        cityInput.type = 'text';
+        cityInput.value = data.city || '';
+        cityInput.placeholder = '城市';
+        cityCell.appendChild(cityInput);
+        
+        // 县名单元格改为输入框
+        const countyCell = cells[2];
+        countyCell.innerHTML = '';
+        countyCell.className = 'edit-cell';
+        const countyInput = document.createElement('input');
+        countyInput.type = 'text';
+        countyInput.value = data.county || '';
+        countyInput.placeholder = '县名';
+        countyCell.appendChild(countyInput);
+        
+        // 县总代单元格改为输入框
+        const agentNameCell = cells[3];
+        agentNameCell.innerHTML = '';
+        agentNameCell.className = 'edit-cell';
+        const agentNameInput = document.createElement('input');
+        agentNameInput.type = 'text';
+        agentNameInput.value = data.name || '';
+        agentNameCell.appendChild(agentNameInput);
+        
+        // 联系电话单元格改为输入框
+        const phoneCell = cells[4];
+        phoneCell.innerHTML = '';
+        phoneCell.className = 'edit-cell';
+        const phoneInput = document.createElement('input');
+        phoneInput.type = 'text';
+        phoneInput.value = data.phone || '';
+        phoneInput.placeholder = '联系电话';
+        phoneCell.appendChild(phoneInput);
+        
+        // 修改操作按钮
+        const actionCell = cells[5];
+        actionCell.innerHTML = '';
+        
+        // 保存按钮
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'save-btn';
+        saveBtn.textContent = '保存';
+        saveBtn.addEventListener('click', async () => {
+            // 获取输入的值
+            const newProvince = provinceInput.value;
+            const newCity = cityInput.value;
+            const newCounty = countyInput.value;
+            const newAgentName = agentNameInput.value;
+            const newAgentPhone = phoneInput.value;
+            
+            // 调用API更新数据
+            const result = await updateCountyAgent(data.county, newAgentName, newAgentPhone, tr, newProvince, newCity, newCounty);
+            if (result) {
+                // 如果当前选中的县是被更新的县，更新详情面板
+                const currentCountyName = document.getElementById('county-name').textContent;
+                if (currentCountyName === data.county) {
+                    showCountyDetails(newCounty || data.county);
+                }
+            }
+        });
+        actionCell.appendChild(saveBtn);
+        
+        // 取消按钮
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'cancel-btn';
+        cancelBtn.textContent = '取消';
+        cancelBtn.addEventListener('click', () => {
+            // 取消编辑
+            toggleRowEditMode(tr, data);
+        });
+        
+        actionCell.appendChild(saveBtn);
+        actionCell.appendChild(cancelBtn);
+    }
+}
+
+// 更新县总代信息 - 已移至 data.js 模块
+
+// 初始化抽屉分割线拖拽功能
+function initDrawerResizer() {
+    let isDragging = false;
+    let startY = 0;
+    let startHeightTop = 0;
+    let startHeightBottom = 0;
+    
+    drawerResizer.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startY = e.clientY;
+        startHeightTop = mappedDataSection.offsetHeight;
+        startHeightBottom = unmappedDataSection.offsetHeight;
+        
+        document.body.style.cursor = 'row-resize';
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const deltaY = e.clientY - startY;
+        const newHeightTop = startHeightTop + deltaY;
+        const newHeightBottom = startHeightBottom - deltaY;
+        
+        // 确保两个部分都有最小高度
+        if (newHeightTop > 100 && newHeightBottom > 100) {
+            mappedDataSection.style.flex = 'none';
+            unmappedDataSection.style.flex = 'none';
+            mappedDataSection.style.height = `${newHeightTop}px`;
+            unmappedDataSection.style.height = `${newHeightBottom}px`;
+        }
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            document.body.style.cursor = '';
+        }
+    });
+}
+
+// 绑定事件
+function bindEvents() {
+    // 登录按钮点击事件
+    loginBtn.addEventListener('click', async () => {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            try {
+                const result = await import('./modules/auth.js').then(auth => auth.login(username, password));
+                // 登录成功后刷新UI
+                checkAuthStatus();
+                alert('登录成功');
+            } catch (error) {
+                alert(error.message || '登录失败');
+            }
+    });
+    
+    // 退出按钮点击事件
+    logoutBtn.addEventListener('click', async () => {
+            try {
+                await import('./modules/auth.js').then(auth => auth.logout());
+                // 退出成功后刷新UI
+                checkAuthStatus();
+                alert('已安全退出');
+            } catch (error) {
+                alert(error.message || '注销失败');
+            }
+    });
+    
+    // 更新按钮点击事件
+    updateBtn.addEventListener('click', async () => {
+        if (!selectedCounty) {
+            alert('请先选择一个县');
+            return;
+        }
+        
+        const countyNameValue = document.getElementById('county-name').textContent;
+        const newProvince = editProvince.value.trim();
+        const newCity = editCity.value.trim();
+        const newCounty = editCounty.value.trim();
+        const newAgentName = editAgentName.value.trim();
+        const newAgentPhone = editAgentPhone.value.trim();
+        
+        if (!newAgentName || !newAgentPhone) {
+            alert('请输入县总代姓名和电话');
+            return;
+        }
+        
+        // 如果提供了省、市、县信息，则需要验证
+        if ((newProvince || newCity || newCounty) && !(newProvince && newCity && newCounty)) {
+            alert('请完整填写省份、城市和县名');
+            return;
+        }
+        
+        try {
+            // 如果没有CSRF令牌，先获取
+            if (!csrfToken) {
+                await getCsrfToken();
+            }
+            
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'X-CSRF-Token': csrfToken
+            };
+            
+            // 构建请求数据
+            const requestData = {
+                agent_name: newAgentName,
+                agent_phone: newAgentPhone,
+                csrf_token: csrfToken
+            };
+            
+            // 如果提供了省、市、县信息，则添加到请求数据中
+            if (newProvince && newCity && newCounty) {
+                requestData.province = newProvince;
+                requestData.city = newCity;
+                requestData.county = newCounty;
+            }
+            
+            const response = await fetch(`/api/county/${countyNameValue}`, {
+                method: 'PUT',
+                headers: headers,
+                body: JSON.stringify(requestData)
+            });
+            
+            const result = await response.json();
+            
+            // 如果返回了新的CSRF令牌，更新它
+            if (result.csrf_token) {
+                csrfToken = result.csrf_token;
+                localStorage.setItem('csrfToken', csrfToken);
+            }
+            
+            if (result.status === 'success') {
+                alert('更新成功');
+                
+                // 重新加载县总代数据
+                await loadAgentsData();
+                
+                // 更新详情面板
+                showCountyDetails(countyNameValue);
+            } else {
+                alert(result.message || '更新失败');
+            }
+        } catch (error) {
+            console.error('更新失败:', error);
+            alert('更新失败，请重试');
+        }
+    });
+    
+    // 抽屉开关按钮点击事件
+    drawerToggleBtn.addEventListener('click', () => {
+        adminDrawer.classList.toggle('active');
+        
+        // 如果抽屉被打开，加载数据
+        if (adminDrawer.classList.contains('active')) {
+            updateDrawerTables();
+        }
+    });
+    
+    // 抽屉关闭按钮点击事件
+    drawerCloseBtn.addEventListener('click', () => {
+        adminDrawer.classList.remove('active');
+    });
+    
+    // 初始化抽屉分割线拖拽功能
+    initDrawerResizer();
+
+    // 新增按钮点击事件
+    addNewBtn.addEventListener('click', () => {
+        addAgentModal.classList.remove('hidden');
+    });
+
+    // 模态框关闭按钮点击事件
+    modalCloseBtn.addEventListener('click', () => {
+        addAgentModal.classList.add('hidden');
+    });
+
+    // 保存新县总代按钮点击事件
+    saveNewAgentBtn.addEventListener('click', handleAddNewAgent);
+
+    // 信息面板关闭按钮事件
+    infoPanelCloseBtn.addEventListener('click', () => {
+        infoPanel.classList.add('hidden');
+        // 如果有选中的县，重置其样式
+        if (selectedCounty) {
+            resetFeatureStyle(selectedCounty);
+            selectedCounty = null;
+        }
+    });
+    
+    // 搜索按钮点击事件
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            searchModal.classList.remove('hidden');
+            searchInput.value = '';
+            searchResult.classList.add('hidden');
+            searchInput.focus();
+        });
+    }
+    
+    // 搜索浮窗关闭按钮点击事件
+    if (searchModalCloseBtn) {
+        searchModalCloseBtn.addEventListener('click', () => {
+            searchModal.classList.add('hidden');
+        });
+    }
+    
+    // 搜索按钮点击事件
+    if (doSearchBtn) {
+        doSearchBtn.addEventListener('click', performSearch);
+    }
+    
+    // 搜索输入框回车事件
+    if (searchInput) {
+        searchInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+    }
+}
+
+// 初始化函数
+async function init() {
+    console.log('init函数被调用');
+    initDOMElements();
+    await getCsrfToken();
+    checkAuthStatus();
+    map = createMap();
+    initData(); // 初始化数据模块
+    setupDataEventListeners(); // 设置数据事件监听
+    await loadGeoJSON();
+    await loadAgentsData();
+    initDrawerSettings();
+    bindEvents();
+    createToastContainer();
+}
+
+// 设置数据事件监听
+function setupDataEventListeners() {
+    // 监听数据更新事件
+    window.addEventListener('agentsDataUpdated', (event) => {
+        console.log('收到数据更新事件', event.detail);
+        // 更新抽屉表格
+        updateDrawerTables();
+    });
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', init);
+
+// 处理新增县总代
+async function handleAddNewAgent() {
+    const newProvince = document.getElementById('new-province').value.trim();
+    const newCity = document.getElementById('new-city').value.trim();
+    const newCounty = document.getElementById('new-county').value.trim();
+    const newAgentName = document.getElementById('new-agent-name').value.trim();
+    const newAgentPhone = document.getElementById('new-agent-phone').value.trim();
+    const newGdp = document.getElementById('new-gdp').value.trim();
+    const newPopulation = document.getElementById('new-population').value.trim();
+
+    const result = await addNewCountyAgent({
+        province: newProvince,
+        city: newCity,
+        county: newCounty,
+        agentName: newAgentName,
+        agentPhone: newAgentPhone,
+        gdp: newGdp,
+        population: newPopulation
+    });
+    
+    if (result) {
+        addAgentModal.classList.add('hidden');
+        // 数据更新已经由 addNewCountyAgent 处理
+    }
+}
+
+// 处理抽屉拖动
+function handleDrawerResize(e) {
+    const drawerRect = adminDrawer.getBoundingClientRect();
+}
+
+// 处理县总代被删除后的UI更新
+function handleDeletedCounty(countyName) {
+    // 如果当前有选中的县，且是被删除的县，则关闭信息面板
+    const currentCountyName = document.getElementById('county-name').textContent;
+    if (currentCountyName === countyName) {
+        infoPanel.classList.add('hidden');
+        if (selectedCounty) {
+            resetFeatureStyle(selectedCounty);
+            selectedCounty = null;
+        }
+    }
+    
+    // 更新抽屉表格
+    updateDrawerTables();
+}
+
+// 执行搜索
+function performSearch() {
+    const searchType = getSelectedSearchType();
+    const searchText = searchInput.value.trim();
+    
+    if (!searchText) {
+        showSearchResult('请输入搜索内容', 'error');
+        return;
+    }
+    
+    if (searchType === 'agent') {
+        searchByAgentName(searchText);
+    } else if (searchType === 'county') {
+        searchByCountyName(searchText);
+    }
+}
+
+// 获取选中的搜索类型
+function getSelectedSearchType() {
+    for (const radio of searchTypeRadios) {
+        if (radio.checked) {
+            return radio.value;
+        }
+    }
+    return 'agent'; // 默认按人名搜索
+}
+
+// 按人名搜索
+function searchByAgentName(agentName) {
+    console.log('搜索县总代:', agentName);
+    
+    // 使用data模块的搜索函数
+    const matchedAgentData = searchAgentByName(agentName);
+    
+    if (!matchedAgentData) {
+        showSearchResult('未找到该县总代', 'error');
+        return;
+    }
+    
+    const countyName = matchedAgentData.county;
+    const gbCode = matchedAgentData.gb_code;
+    
+    if (!countyName) {
+        showSearchResult('该县总代未填写县级信息', 'error');
+        return;
+    }
+    
+    if (!gbCode || gbCode === '') {
+        showSearchResult('县级信息映射错误，请检查', 'error');
+        return;
+    }
+    
+    // 检查GB代码是否能在GeoJSON数据中找到
+    let foundInGeoJSON = false;
+    let targetCountyName = null;
+    
+    if (window.geojsonData) {
+        for (const feature of window.geojsonData.features) {
+            if (feature.properties && feature.properties.gb === gbCode) {
+                foundInGeoJSON = true;
+                targetCountyName = feature.properties.name;
+                break;
+            }
+        }
+    }
+    
+    if (!foundInGeoJSON) {
+        showSearchResult('县级信息映射错误，请检查', 'error');
+        return;
+    }
+    
+    // 在地图上查找并定位到对应的县，使用GB编号以确保准确性
+    locateCountyOnMap(targetCountyName, gbCode);
+}
+
+// 按县名搜索
+function searchByCountyName(countyName) {
+    if (!window.geojsonData) {
+        showSearchResult('地图数据未加载', 'error');
+        return;
+    }
+    
+    // 查找匹配的县，使用精确匹配而不是模糊匹配
+    const matchedCounties = window.geojsonData.features.filter(feature => 
+        feature.properties && 
+        feature.properties.name && 
+        feature.properties.name === countyName
+    );
+    
+    // 如果没有精确匹配，再尝试模糊匹配
+    if (matchedCounties.length === 0) {
+        const fuzzyMatchedCounties = window.geojsonData.features.filter(feature => 
+            feature.properties && 
+            feature.properties.name && 
+            feature.properties.name.includes(countyName)
+        );
+        
+        if (fuzzyMatchedCounties.length === 0) {
+            showSearchResult('县名填写有误', 'error');
+            return;
+        } else {
+            // 有模糊匹配结果，让用户选择
+            showCountySelectionDialog(fuzzyMatchedCounties);
+            return;
+        }
+    }
+    
+    if (matchedCounties.length === 1) {
+        // 精确匹配，直接定位，使用GB编号以确保准确性
+        locateCountyOnMap(matchedCounties[0].properties.name, matchedCounties[0].properties.gb);
+        showSearchResult(`已定位到 ${matchedCounties[0].properties.name}`, 'success');
+    } else {
+        // 多个精确匹配结果，让用户选择
+        showCountySelectionDialog(matchedCounties);
+    }
+}
+
+// 显示县选择对话框
+function showCountySelectionDialog(countyFeatures) {
+    // 清空之前的搜索结果
+    searchResultText.innerHTML = '';
+    
+    // 显示标题
+    const title = document.createElement('p');
+    title.textContent = `找到 ${countyFeatures.length} 个匹配的县，请选择：`;
+    searchResultText.appendChild(title);
+    
+    // 创建选择按钮
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'county-selection-buttons';
+    
+    countyFeatures.forEach((feature, index) => {
+        const button = document.createElement('button');
+        button.className = 'county-selection-btn';
+        button.textContent = feature.properties.name;
+        
+        // 检查该县是否有总代，设置相应的颜色
+        const hasAgent = checkCountyHasAgent(feature);
+        if (hasAgent) {
+            // 有总代，使用绿色背景
+            button.style.backgroundColor = '#27ae60';
+            button.style.color = 'white';
+        } else {
+            // 无总代，使用灰色背景
+            button.style.backgroundColor = '#bdc3c7';
+            button.style.color = '#333';
+        }
+        
+        // 添加点击事件，使用IIFE（立即执行函数表达式）来捕获当前的feature值
+        button.addEventListener('click', ((currentFeature) => {
+            return () => {
+                locateCountyOnMap(currentFeature.properties.name, currentFeature.properties.gb);
+                showSearchResult(`已定位到 ${currentFeature.properties.name}`, 'success');
+            };
+        })(feature));
+        
+        buttonContainer.appendChild(button);
+    });
+    
+    searchResultText.appendChild(buttonContainer);
+    
+    // 显示搜索结果
+    searchResult.classList.remove('hidden', 'error', 'success');
+    searchResult.classList.add('info');
+}
+
+// 在地图上定位县
+function locateCountyOnMap(countyName, gbCode = null) {
+    if (!window.geojsonData) return;
+    
+    // 获取geojsonLayer实例
+    const geojsonLayer = getGeoJSONLayer();
+    if (!geojsonLayer) return;
+    
+    // 遍历GeoJSON数据查找匹配的县
+    window.geojsonData.features.some(feature => {
+        // 如果提供了GB代码，优先使用GB代码匹配，否则使用县名匹配
+        if (feature.properties && 
+            ((gbCode && feature.properties.gb === gbCode) || 
+             (!gbCode && feature.properties.name === countyName))) {
+            
+            // 获取图层 (GeoJSON数据中使用gb字段)
+            const layer = geojsonLayer.getLayers().find(l => 
+                l.feature.properties.gb === feature.properties.gb
+            );
+            
+            if (layer) {
+                // 重置所有图层样式
+                geojsonLayer.eachLayer(l => {
+                    l.setStyle(styleCounty(l.feature));
+                });
+                
+                // 高亮显示匹配的图层
+                layer.setStyle({
+                    weight: 3,
+                    color: '#3498db',
+                    dashArray: '',
+                    fillOpacity: 0.7
+                });
+                
+                // 添加闪烁效果
+                createBlinkEffect(layer);
+                
+                // 显示县详情
+                showCountyDetails(feature.properties.name, feature);
+                
+                // 缩放到县位置，减小放大级别
+                const bounds = layer.getBounds();
+                map.fitBounds(bounds, {
+                    padding: [100, 100], // 增加内边距，使缩放更合适
+                    maxZoom: 8, // 降低最大缩放级别，避免放得太大
+                    animate: true // 使用动画效果
+                });
+                
+                return true; // 找到后停止遍历
+            }
+        }
+        return false;
+    });
+}
+
+// 创建闪烁效果
+function createBlinkEffect(layer) {
+    const originalStyle = {
+        weight: 3,
+        color: '#3498db',
+        dashArray: '',
+        fillOpacity: 0.7
+    };
+    
+    const highlightStyle = {
+        weight: 3,
+        color: '#2ecc71', // 更改为绿色，更符合页面风格
+        dashArray: '',
+        fillOpacity: 0.8
+    };
+    
+    // 使用更平滑的动画效果
+    let count = 0;
+    const interval = setInterval(() => {
+        if (count % 2 === 0) {
+            layer.setStyle(highlightStyle);
+        } else {
+            layer.setStyle(originalStyle);
+        }
+        
+        count++;
+        if (count >= 4) { // 减少闪烁次数为2次
+            clearInterval(interval);
+            layer.setStyle(originalStyle);
+        }
+    }, 400); // 增加间隔时间，使动画更平滑
+}
+
+// 显示搜索结果
+function showSearchResult(message, type = 'info') {
+    // 清空之前的内容
+    searchResultText.innerHTML = '';
+    
+    // 检查消息是文本还是HTML元素
+    if (typeof message === 'string') {
+        // 检查是否包含HTML标签
+        if (message.includes('<br>') || message.includes('<div>') || message.includes('<button>')) {
+            searchResultText.innerHTML = message;
+        } else {
+            searchResultText.textContent = message;
+        }
+    } else if (message instanceof Node) {
+        searchResultText.appendChild(message);
+    }
+    
+    searchResult.classList.remove('hidden', 'error', 'success');
+    searchResult.classList.add(type);
+}
