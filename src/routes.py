@@ -16,6 +16,11 @@ from src.utils import get_data_path
 
 def register_routes(app):
     """注册所有路由"""
+    # 路由：首页
+    @app.route('/')
+    def index():
+        # 使用 Flask 内置的静态文件发送接口，自动基于 app.static_folder 定位
+        return app.send_static_file('index.html')
 
     # 路由：安全退出
     @app.route('/api/logout', methods=['POST'])
