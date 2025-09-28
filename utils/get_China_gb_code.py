@@ -81,6 +81,29 @@ def get_administrative_divisions_nested():
             prefixed_code = f"156{code}"
             result_json.setdefault(province_name, {}).setdefault(city_name, {})[name] = prefixed_code
             
+    # 添加特殊地级市（没有下辖县区的地级市）
+    special_cities = {
+        "广东省": {
+            "东莞市": {"东莞市": "156441900"},
+            "中山市": {"中山市": "156442000"}
+        },
+        "海南省": {
+            "儋州市": {"儋州市": "156460400"}
+        },
+        "甘肃省": {
+            "嘉峪关市": {"嘉峪关市": "156620200"}
+        }
+    }
+    
+    # 将特殊地级市添加到结果中
+    for province, cities in special_cities.items():
+        if province not in result_json:
+            result_json[province] = {}
+        for city, counties in cities.items():
+            if city not in result_json[province]:
+                result_json[province][city] = {}
+            result_json[province][city].update(counties)
+            
     print("数据解析完成！")
     return result_json
 
