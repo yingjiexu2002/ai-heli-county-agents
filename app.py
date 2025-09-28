@@ -69,6 +69,13 @@ app.config['JSON_AS_ASCII'] = False
 
 
 if __name__ == '__main__':
+    # 路由：首页，单独拿出来，解决奇怪的bug
+    @app.route('/')
+    def index():
+        # 使用 Flask 内置的静态文件发送接口，自动基于 app.static_folder 定位
+        return app.send_static_file('index.html')
+    
+
     # 注册路由
     register_routes(app)
     
