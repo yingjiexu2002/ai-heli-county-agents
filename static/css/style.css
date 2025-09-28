@@ -37,6 +37,12 @@ header {
     z-index: 1000;
 }
 
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
 header h1 {
     color: #2c3e50;
     font-size: 24px;
@@ -604,50 +610,35 @@ table tr:hover {
     gap: 15px;
 }
 
-/* 图标按钮通用样式 */
-.icon-btn {
-    cursor: pointer;
-    border: none;
-    outline: none;
-}
-
-/* 搜索按钮样式 */
-.search-btn {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border-radius: 50%;
+/* 通用按钮样式 */
+.btn {
+    padding: 8px 16px;
     background-color: #3498db;
-    transition: all 0.3s ease;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
 }
 
-.search-btn:hover {
+.btn:hover {
     background-color: #2980b9;
-    transform: scale(1.05);
 }
 
-.search-icon {
-    display: inline-block;
-    width: 18px;
-    height: 18px;
-    background: transparent;
-    border: 2px solid white;
-    border-radius: 50%;
-    position: relative;
+/* 用户信息提示样式 */
+.user-info {
+    background-color: #e8f4fc;
+    color: #3498db;
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid #3498db;
 }
 
-.search-icon::after {
-    content: '';
-    position: absolute;
-    top: 14px;
-    left: 13px;
-    width: 7px;
-    height: 2px;
-    background: white;
-    transform: rotate(45deg);
+.user-info.hidden {
+    display: none;
 }
 
 /* 搜索浮窗样式 */

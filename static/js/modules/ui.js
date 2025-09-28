@@ -589,13 +589,14 @@ export function updateAuthUI(authInfo) {
         loginSection.classList.add('hidden');
         userSection.classList.remove('hidden');
         userInfo.textContent = '管理员已登录';
+        userInfo.classList.remove('hidden');
         if (adminPanel) adminPanel.classList.remove('hidden');
         if (drawerToggleBtn) drawerToggleBtn.classList.remove('hidden');
     } else {
         // 未登录或非管理员（非管理员在本系统中视为未登录）
         loginSection.classList.remove('hidden');
         userSection.classList.add('hidden');
-        userInfo.textContent = '请登录';
+        userInfo.classList.add('hidden');
         if (adminPanel) adminPanel.classList.add('hidden');
         if (drawerToggleBtn) drawerToggleBtn.classList.add('hidden');
         

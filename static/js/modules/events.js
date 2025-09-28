@@ -13,6 +13,7 @@ import { getSelectedCounty, resetSelectedCounty,
          closeAddAgentModal } from './ui.js';
 import { resetFeatureStyle } from './map.js';
 import { locateCountyOnMap } from './search.js';
+import { showToast } from './utils.js';
 
 /**
  * 处理新增县总代
@@ -83,25 +84,74 @@ function handleDeletedCounty(countyName) {
 export function bindEvents() {
     // 登录按钮点击事件
     const loginBtn = document.getElementById('login-btn');
+    const loginModal = document.getElementById('login-modal');
+    const loginModalCloseBtn = document.getElementById('login-modal-close-btn');
+    const loginSubmitBtn = document.getElementById('login-submit-btn');
+    
+    // 显示登录模态框
     if (loginBtn) {
-        loginBtn.addEventListener('click', async () => {
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
+        loginBtn.addEventListener('click', () => {
+            if (loginModal) {
+                loginModal.classList.remove('hidden');
+            }
+        });
+    }
+    
+    // 关闭登录模态框
+    if (loginModalCloseBtn) {
+        loginModalCloseBtn.addEventListener('click', () => {
+            if (loginModal) {
+                loginModal.classList.add('hidden');
+            }
+        });
+    }
+    
+    // 点击模态框外部关闭
+    if (loginModal) {
+        loginModal.addEventListener('click', (e) => {
+            if (e.target === loginModal) {
+                loginModal.classList.add('hidden');
+            }
+        });
+    }
+    
+    // 处理登录提交
+    if (loginSubmitBtn) {
+        loginSubmitBtn.addEventListener('click', async () => {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            if (!username || !password) {
+                showToast('请输入用户名和密码', 'error');
+                return;
+            }
+            
             try {
                 const result = await import('./auth.js').then(auth => auth.login(username, password));
-                // 登录成功后刷新UI
-                checkAuthStatus();
                 
-                // 显式触发认证状态变更事件
-                const isAdmin = localStorage.getItem('isAdmin') === 'true';
-                const authEvent = new CustomEvent('authStatusChanged', { 
-                    detail: { isAdmin: isAdmin, isLoggedIn: true, username: username } 
-                });
-                window.dispatchEvent(authEvent);
-                
-                alert('登录成功');
+                if (result.status === 'success') {
+                    // 关闭模态框
+                    if (loginModal) {
+                        loginModal.classList.add('hidden');
+                    }
+                    
+                    // 清空输入框
+                    document.getElementById('login-username').value = '';
+                    document.getElementById('login-password').value = '';
+                    
+                    // 显式触发认证状态变更事件
+                    const authEvent = new CustomEvent('authStatusChanged', { 
+                        detail: { isAdmin: result.is_admin, isLoggedIn: true, username: username } 
+                    });
+                    window.dispatchEvent(authEvent);
+                    
+                    showToast('登录成功', 'success');
+                } else {
+                    showToast(result.message || '登录失败', 'error');
+                }
             } catch (error) {
-                alert(error.message || '登录失败');
+                console.error('登录失败:', error);
+                showToast('登录失败，请重试', 'error');
             }
         });
     }
@@ -111,19 +161,22 @@ export function bindEvents() {
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
             try {
-                await import('./auth.js').then(auth => auth.logout());
-                // 退出成功后刷新UI
-                checkAuthStatus();
+                const result = await import('./auth.js').then(auth => auth.logout());
                 
-                // 显式触发认证状态变更事件
-                const authEvent = new CustomEvent('authStatusChanged', { 
-                    detail: { isAdmin: false, isLoggedIn: false, username: '' } 
-                });
-                window.dispatchEvent(authEvent);
-                
-                alert('已安全退出');
+                if (result.status === 'success') {
+                    // 显式触发认证状态变更事件
+                    const authEvent = new CustomEvent('authStatusChanged', { 
+                        detail: { isAdmin: false, isLoggedIn: false, username: '' } 
+                    });
+                    window.dispatchEvent(authEvent);
+                    
+                    showToast('已安全退出', 'success');
+                } else {
+                    showToast(result.message || '注销失败', 'error');
+                }
             } catch (error) {
-                alert(error.message || '注销失败');
+                console.error('注销失败:', error);
+                showToast('注销失败，请重试', 'error');
             }
         });
     }
@@ -134,7 +187,7 @@ export function bindEvents() {
         updateBtn.addEventListener('click', async () => {
             const selectedCounty = getSelectedCounty();
             if (!selectedCounty) {
-                alert('请先选择一个县');
+                showToast('请先选择一个县', 'error');
                 return;
             }
             
@@ -146,13 +199,13 @@ export function bindEvents() {
             const newAgentPhone = document.getElementById('edit-agent-phone').value.trim();
             
             if (!newAgentName || !newAgentPhone) {
-                alert('请输入县总代姓名和电话');
+                showToast('请输入县总代姓名和电话', 'error');
                 return;
             }
             
             // 如果提供了省、市、县信息，则需要验证
             if ((newProvince || newCity || newCounty) && !(newProvince && newCity && newCounty)) {
-                alert('请完整填写省份、城市和县名');
+                showToast('请完整填写省份、城市和县名', 'error');
                 return;
             }
             
@@ -161,16 +214,18 @@ export function bindEvents() {
                 const result = await updateCountyAgent(countyNameValue, newAgentName, newAgentPhone, null, newProvince, newCity, newCounty);
                 
                 if (result) {
-                    alert('更新成功');
+                    showToast('更新成功', 'success');
                     // 更新详情面板
                     showCountyDetails(countyNameValue);
                 }
             } catch (error) {
                 console.error('更新失败:', error);
-                alert('更新失败，请重试');
+                showToast('更新失败，请重试', 'error');
             }
         });
     }
+    
+
     
     // 抽屉开关按钮点击事件
     const drawerToggleBtn = document.getElementById('drawer-toggle-btn');
