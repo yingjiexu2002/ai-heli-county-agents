@@ -386,12 +386,19 @@ def register_routes(app):
             }), 400
         
         # 如果提供了新的省、市、县信息，则进行重复检查
+        # 只有当确实提供了新的省市县信息时才进行检查（避免只更新电话号码时触发检查）
         if new_province and new_city and new_county:
             # 检查是否与当前正在更新的县相同（允许更新当前县的信息）
-            if new_county != county_name or new_province != data.get('old_province', '') or new_city != data.get('old_city', ''):
+            # 只有当新的省市县与当前县不同时，才检查是否已存在冲突
+            is_same_location = (new_county == county_name and 
+                               new_province == data.get('old_province', new_province) and 
+                               new_city == data.get('old_city', new_city))
+            
+            if not is_same_location:
                 # 检查新的省+市+县是否已存在
                 agents_data = load_agent_data()
                 if new_province in agents_data and new_city in agents_data[new_province] and new_county in agents_data[new_province][new_city]:
+                    # 如果该位置已存在其他总代，则禁止编辑
                     existing_agent = agents_data[new_province][new_city][new_county]['name']
                     if existing_agent:
                         return jsonify({
