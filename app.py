@@ -1,16 +1,8 @@
 import os
 import sys
-import json
-import jwt
-import uuid
-import time
-import hashlib
-import csv
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, session, Response
 from flask_cors import CORS
-from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
 import secrets
 from src.utils import get_data_path
 from src.auth import (
@@ -20,6 +12,7 @@ from src.auth import (
 )
 from src.data_handler import load_agent_data, load_geojson_data
 from src.routes import register_routes
+from src.config import config
 
 
 
@@ -27,7 +20,11 @@ from src.routes import register_routes
 app = Flask(__name__, static_folder=get_data_path('static'))
 CORS(app, supports_credentials=True)
 
-# 使用更安全且健壮的密钥生成方式（处理不可写目录等情况）
+# 使用配置模块
+config_obj = config['development']  # 默认使用开发配置
+app.config.from_object(config_obj)
+
+# 配置密钥（保留原有的密钥生成逻辑，但简化代码）
 if not os.environ.get('SECRET_KEY'):
     try:
         # 如果环境变量中没有设置密钥，则尝试从.env文件读取
