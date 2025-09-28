@@ -21,7 +21,7 @@ ATTEMPT_TIMEOUT = 300  # 5分钟
 # 模拟用户数据库 - 使用更安全的密码哈希方法
 # 注意：为了与前端加密流程匹配，我们需要存储密码+salt的SHA256哈希值
 salt = "aiheliSalt2023"
-salted_password = "123456" + salt
+salted_password = "890890" + salt
 hashed_salted_password = hashlib.sha256(salted_password.encode('utf-8')).hexdigest()
 
 users = {
