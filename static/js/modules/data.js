@@ -228,9 +228,10 @@ export function getCountyAgentInfo(countyName, feature) {
                 // 只检查GB代码是否匹配
                 const countyData = window.agentsData[province][city][county];
                 if (countyData.gb_code && countyData.gb_code === gbCode) {
-                    // 添加省份信息到返回数据中
+                    // 添加省份、城市和县名信息到返回数据中
                     countyData.province = province;
                     countyData.city = city;
+                    countyData.county = county;
                     return countyData;
                 }
             }

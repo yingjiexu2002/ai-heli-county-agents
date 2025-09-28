@@ -162,7 +162,7 @@ export function showCountyDetails(countyNameVal, feature = null) {
     
     // 设置县名
     if (countyName) {
-        countyName.textContent = countyNameVal;
+        countyName.textContent = countyNameVal || '未知县名';
     }
     
     // 查找县的代理信息
