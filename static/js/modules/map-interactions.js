@@ -45,9 +45,11 @@ export function onEachCounty(feature, layer) {
         
         const status = document.createElement('p');
         if (agentInfo && agentInfo.has_agent) {
-            status.innerHTML = `<strong>状态：</strong><span style="color: #27ae60;">已有县总代</span>`;
+            // 有总代：显示为「总代：xxx」，其中"总代"是绿色，"xxx"保持黑色
+            status.innerHTML = `<strong style="color: #27ae60;">总代：</strong>${agentInfo.name || '未知'}`;
         } else {
-            status.innerHTML = `<strong>状态：</strong><span style="color: #e74c3c;">暂无县总代</span>`;
+            // 无总代：显示为「总代：暂无」，其中"总代"是红色，"暂无"保持黑色
+            status.innerHTML = `<strong style="color: #e74c3c;">总代：</strong>暂无`;
         }
         popupContent.appendChild(status);
         
