@@ -8,7 +8,7 @@ from src.auth import (
     authenticate_user, update_user_login_info
 )
 from src.data_handler import (
-    load_agent_data, load_geojson_data, get_county_info, 
+    load_agent_data, load_geojson_data, get_compressed_geojson_data, get_county_info, 
     add_county_data, update_county_data, delete_county_data
 )
 from src.utils import get_data_path
@@ -432,14 +432,42 @@ def register_routes(app):
     @app.route('/api/geojson', methods=['GET'])
     def get_geojson():
         try:
-            # 使用数据处理模块加载GeoJSON数据
-            geojson_data = load_geojson_data()
+            # 记录开始时间
+            start_time = time.time()
             
-            # GeoJSON数据本身已经包含了GB代码，直接返回即可
-            # 在响应头中添加CSRF令牌
-            response = jsonify(geojson_data)
-            response.headers['X-CSRF-Token'] = generate_csrf_token()
+            # 检查客户端是否支持gzip压缩
+            accepts_gzip = 'gzip' in request.headers.get('Accept-Encoding', '').lower()
+            
+            if accepts_gzip:
+                # 直接返回预压缩的数据
+                compressed_data = get_compressed_geojson_data()
+                
+                response = Response(
+                    compressed_data,
+                    mimetype='application/json',
+                    headers={
+                        'Content-Encoding': 'gzip',
+                        'X-CSRF-Token': generate_csrf_token(),
+                        'Content-Length': str(len(compressed_data)),
+                        'Cache-Control': 'public, max-age=3600'  # 缓存1小时
+                    }
+                )
+                
+                response_time = time.time() - start_time
+                print(f'/api/geojson 响应时间: {response_time:.3f}s (预压缩gzip数据)')
+                
+            else:
+                # 返回原始JSON数据
+                geojson_data = load_geojson_data()
+                response = jsonify(geojson_data)
+                response.headers['X-CSRF-Token'] = generate_csrf_token()
+                response.headers['Cache-Control'] = 'public, max-age=3600'  # 缓存1小时
+                
+                response_time = time.time() - start_time
+                print(f'/api/geojson 响应时间: {response_time:.3f}s (原始JSON数据)')
+            
             return response
+            
         except Exception as e:
             return jsonify({
                 'status': 'error',

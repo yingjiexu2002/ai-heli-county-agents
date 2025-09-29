@@ -148,7 +148,10 @@ def main():
     tester = APIPerformanceTester()
     
     # 测试geojson接口
-    result = tester.test_endpoint('/api/geojson', num_requests=5)
+    headers = {
+        'Accept-Encoding': 'gzip, deflate, br',
+    }
+    result = tester.test_endpoint('/api/geojson', num_requests=5, headers=headers)
     tester.print_results(result)
     tester.save_results(result)
     

@@ -10,10 +10,9 @@ from src.auth import (
     admin_required, limit_login_attempts, users, login_attempts, generate_auth_token,
     authenticate_user, update_user_login_info
 )
-from src.data_handler import load_agent_data, load_geojson_data
+from src.data_handler import load_agent_data, load_geojson_data, preload_and_compress_geojson
 from src.routes import register_routes
 from src.config import config
-
 
 
 # 使用兼容打包路径的静态目录
@@ -67,11 +66,16 @@ app.config['JSON_AS_ASCII'] = False
 # 注册路由
 register_routes(app)
 
+# 预加载并压缩GeoJSON数据
+print("启动优化：预加载和压缩GeoJSON数据...")
+preload_and_compress_geojson()
+
 if __name__ == '__main__':
     try:
         # 确保外部数据文件存在
         from utils.pack_utils import ensure_external_data_exists
         ensure_external_data_exists()
+        
         # 配置SSL上下文以启用HTTPS
         ssl_context = (get_data_path('cert.pem'), get_data_path('key.pem'))
         app.run(debug=True, host='0.0.0.0', port=5000, ssl_context=ssl_context)

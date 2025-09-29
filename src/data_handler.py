@@ -1,7 +1,13 @@
 import csv
 import json
 import os
+import gzip
+import io
 from src.utils import get_data_path
+
+# GeoJSON数据缓存
+_geojson_cache = None
+_geojson_compressed_cache = None
 
 
 def load_agent_data():
@@ -226,11 +232,79 @@ def delete_county_data(county_name):
 
 
 def load_geojson_data():
-    """加载GeoJSON数据"""
+    """加载GeoJSON数据（使用内存缓存）"""
+    global _geojson_cache
+    
+    # 如果缓存中已有数据，直接返回
+    if _geojson_cache is not None:
+        return _geojson_cache
+    
     try:
-        # 加载GeoJSON数据
+        # 首次加载时记录耗时
+        import time
+        start_time = time.time()
+        
+        # 从磁盘加载GeoJSON数据
         with open(get_data_path('data/中国_县.geojson'), 'r', encoding='utf-8') as f:
-            geojson_data = json.load(f)
-        return geojson_data
+            _geojson_cache = json.load(f)
+        
+        load_time = time.time() - start_time
+        print(f'GeoJSON数据首次加载完成，耗时: {load_time:.3f}s')
+        
+        return _geojson_cache
     except Exception as e:
         raise Exception(f'加载GeoJSON数据失败: {str(e)}')
+
+
+def get_compressed_geojson_data():
+    """获取预压缩的GeoJSON数据"""
+    global _geojson_compressed_cache
+    
+    # 如果压缩缓存存在，直接返回
+    if _geojson_compressed_cache is not None:
+        return _geojson_compressed_cache
+    
+    # 如果压缩缓存不存在，创建压缩数据
+    geojson_data = load_geojson_data()
+    
+    # 将数据转换为JSON字符串
+    json_str = json.dumps(geojson_data, ensure_ascii=False, separators=(',', ':'))
+    original_size = len(json_str.encode('utf-8'))
+    
+    # 使用gzip压缩
+    buffer = io.BytesIO()
+    with gzip.GzipFile(fileobj=buffer, mode='wb') as f:
+        f.write(json_str.encode('utf-8'))
+    
+    _geojson_compressed_cache = buffer.getvalue()
+    compressed_size = len(_geojson_compressed_cache)
+    compression_ratio = (1 - compressed_size / original_size) * 100
+    
+    print(f'GeoJSON数据压缩完成: {original_size:,} → {compressed_size:,} 字节 (压缩率: {compression_ratio:.1f}%)')
+    
+    return _geojson_compressed_cache
+
+
+def preload_and_compress_geojson():
+    """预加载并压缩GeoJSON数据"""
+    print('正在预加载和压缩GeoJSON数据...')
+    
+    import time
+    start_time = time.time()
+    
+    # 预加载原始数据
+    load_geojson_data()
+    
+    # 预压缩数据
+    get_compressed_geojson_data()
+    
+    total_time = time.time() - start_time
+    print(f'GeoJSON数据预加载和压缩完成，总耗时: {total_time:.3f}s')
+
+
+def clear_geojson_cache():
+    """清除GeoJSON缓存（用于开发调试）"""
+    global _geojson_cache, _geojson_compressed_cache
+    _geojson_cache = None
+    _geojson_compressed_cache = None
+    print('GeoJSON缓存已清除')
