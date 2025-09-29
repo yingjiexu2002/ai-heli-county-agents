@@ -1,15 +1,16 @@
+"""
+此模块为 Flask 应用的入口文件，负责初始化 Flask 应用，
+配置应用的各项参数，包括密钥、CSRF 保护等，
+注册路由并预加载 GeoJSON 数据，最后启动 Flask 应用。
+"""
 import os
 import sys
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, send_from_directory, session, Response
-from flask_cors import CORS
 import secrets
+from datetime import datetime, timedelta
+from flask import Flask
+from flask_cors import CORS
+
 from src.utils import get_data_path
-from src.auth import (
-    generate_csrf_token, validate_csrf_token, token_required, optional_token, 
-    admin_required, limit_login_attempts, users, login_attempts, generate_auth_token,
-    authenticate_user, update_user_login_info
-)
 from src.data_handler import load_agent_data, load_geojson_data, preload_and_compress_geojson
 from src.routes import register_routes
 from src.config import config
